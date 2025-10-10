@@ -192,6 +192,27 @@ class MemoryManager:
         
         return min(1.0, score)
     
+    async def save_event(self, event: Dict[str, Any]) -> None:
+        """Save an event to memory (compatibility method)."""
+        try:
+            # Convert event to interaction format
+            interaction = {
+                "timestamp": event.get("timestamp", asyncio.get_event_loop().time()),
+                "event": event,
+                "type": "system_event"
+            }
+            
+            self.short_term.append(interaction)
+            
+            # Save periodically
+            if len(self.short_term) % 5 == 0:
+                self._save_memory()
+                
+            log.debug("Event saved to memory", extra={"event_type": event.get("type", "unknown")})
+            
+        except Exception as e:
+            log.error(f"Failed to save event: {e}")
+    
     def get_recent_context(self, limit: int = 5) -> List[Dict[str, Any]]:
         """Get recent conversation context.
         

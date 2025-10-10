@@ -4,6 +4,7 @@ import os
 import json
 import logging
 from pathlib import Path
+from copy import deepcopy
 
 # Optional dependency
 try:
@@ -101,7 +102,8 @@ class Config:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 self._data = json.load(f)
         except Exception:
-            self._data = DEFAULT_CONFIG.copy()
+            # Use deepcopy so nested structures are not shared with module-level DEFAULT_CONFIG
+            self._data = deepcopy(DEFAULT_CONFIG)
             self.save()
 
     def save(self):

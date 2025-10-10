@@ -261,13 +261,17 @@ class Executor:
                     for a in actions:
                         results.append(await self._execute_action(a, execution_context))
             
+            # Save to memory if available
             if "memory_manager" in self.components:
-                mem = self.components["memory_manager"]
-                mem.save_event({
-                                "plan": plan,
+                try:
+                    mem = self.components["memory_manager"]
+                    await mem.save_event({
+                        "plan": plan,
                         "result": result.to_dict(),
-                "timestamp": time.time()
-                })
+                        "timestamp": time.time()
+                    })
+                except Exception as e:
+                    log.debug(f"Memory save failed: {e}")
 
             # Aggregate results
             final_results = {
@@ -387,15 +391,26 @@ class Executor:
         security_level = context.get("security_level", "normal")
         
         try:
-            # Pass context to AI assistant if it supports it
-            if hasattr(self, "policy_manager"):
-                allowed = self.policy_manager.validate_action(action)
-                if not allowed:
-                    return {"status": "blocked", "error": "Action blocked by policy manager"}
-            else:
-                # Fallback to basic response
-                response = f"AI Response to: {input_text} (security: {security_level})"
-                
+            # Generate AI response
+            if ai_assistant:
+                response = await ai_assistant.process_input(input_text, source=source, context=context)
+                return {
+                    "status": "completed",
+                    "data": {"response": response}
+                }
+            
+            # Fallback: Use LLM directly
+            llm_engine = self.components.get("llm_engine")
+            if llm_engine:
+                user_dict = {source: input_text}
+                response = llm_engine.generate_response(user_dict, mode=0)
+                return {
+                    "status": "completed",
+                    "data": {"response": response}
+                }
+            
+            # Final fallback
+            response = f"I received your message: {input_text}"
             return {
                 "status": "completed",
                 "data": {"response": response}
@@ -489,11 +504,23 @@ class Executor:
         destination = params.get("destination", "unknown")
         
         try:
-            # Get response from context or use default
-            response_data = context.get("response", "No response data")
+            # Get response from parameters or context
+            message = params.get("message", context.get("response", "No response data"))
+            
+            # Send output through output manager
+            if hasattr(output_manager, 'emit_simple'):
+                await output_manager.emit_simple(message, destination)
+            else:
+                # Fallback to basic emit
+                await output_manager.emit({
+                    "content": message,
+                    "destination": destination,
+                    "format": "text"
+                })
+            
             return {
                 "status": "completed", 
-                "data": {"output_sent": True}
+                "data": {"output_sent": True, "message": message}
             }
         except Exception as e:
             return {"status": "failed", "error": str(e)}

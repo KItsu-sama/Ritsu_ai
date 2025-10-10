@@ -19,27 +19,29 @@ class RitsuLLM:
         self.conversation_history: List[Dict[str, str]] = []
         
     def _load_static_data(self) -> tuple[str, str, Dict]:
-        """Load Ritsu's character definition, Core Memory, and Router Config."""
+        """Load Ritsu's lightweight character definition and metadata."""
         
-        # 1. Character Context (Persona)
+        # Load basic character context (lightweight)
         try:
             with open("sample_Ritsu.txt", "r", encoding="utf-8") as f:
-                character_context = f.read()
+                character_context = f.read().strip()
         except FileNotFoundError:
-            character_context = "You are Ritsu, a technical AI assistant."
+            character_context = "You are Ritsu, a technical AI assistant. Be helpful, concise, and accurate."
             
-        # 2. Core Memory (Rules) - Formatted for prompt injection
+        # Load core memory (minimal - only injected when needed)
         core_memory_str = ""
         try:
             with open("core_memory.json", "r", encoding="utf-8") as f:
                 data = json.load(f)
-                core_memory_str = "### CORE MEMORY DIRECTIVES ###\n"
-                for item in data.get("ritsu_identity_v1", []):
-                    core_memory_str += f"- [{item['category']}]: {item['data']}\n"
+                # Only load essential rules for base context
+                essential_rules = [item for item in data.get("ritsu_identity_v1", []) 
+                                 if item['category'] in ['core_behavior', 'communication']]
+                if essential_rules:
+                    core_memory_str = "\n" + "\n".join([f"- {item['data']}" for item in essential_rules])
         except (FileNotFoundError, json.JSONDecodeError):
-            core_memory_str = "No core memory loaded. Adhere to basic assistant rules."
+            core_memory_str = ""
 
-        # 3. AI Router Config (Placeholder for now)
+        # Load metadata router (for context injection)
         ai_router_config = {}
         try:
              with open("meta_data_router.json", "r", encoding="utf-8") as f:
@@ -68,7 +70,12 @@ class RitsuLLM:
         
         try:
             if stream:
-                return self._stream_response(prompt)
+                # Stream may not be implemented; fallback to complete response
+                if hasattr(self, "_stream_response") and callable(getattr(self, "_stream_response")):
+                    return self._stream_response(prompt)
+                else:
+                    # Graceful fallback
+                    return self._complete_response(prompt)
             else:
                 return self._complete_response(prompt)
         except Exception as e:

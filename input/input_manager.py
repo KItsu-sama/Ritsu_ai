@@ -208,6 +208,7 @@ class InputManager:
     
     async def _handle_cli_input(self) -> Optional[Dict[str, Any]]:
         """Handle command line input."""
+        global Ritsu_turn
 
         if not Ritsu_turn :
             try:

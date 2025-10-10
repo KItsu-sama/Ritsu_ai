@@ -206,7 +206,7 @@ class Calculator:
     def factorial(self, n: int) -> int:
         """Return the factorial of n."""
         if n < 0:
-            return "Error: Factorial of negative number"
+            raise ValueError("Factorial of negative number")
         if n == 0 or n == 1:
             return 1
         result = 1
@@ -217,5 +217,5 @@ class Calculator:
     def combinations(self, n: int, r: int) -> int:
         """Return the number of combinations of n items taken r at a time."""
         if r > n or n < 0 or r < 0:
-            return "Error: Invalid values for n and r"
+            raise ValueError("Invalid values for n and r")
         return self.factorial(n) // (self.factorial(r) * self.factorial(n - r))

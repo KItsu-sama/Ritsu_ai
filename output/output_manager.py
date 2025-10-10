@@ -207,6 +207,14 @@ class OutputManager:
         if self.enable_avatar and not is_error:
             await self._output_to_avatar(content, format_type, metadata)
     
+    async def emit_simple(self, message: str, destination: str = "cli") -> None:
+        """Simple emit method for quick messages."""
+        await self.emit({
+            "content": message,
+            "destination": destination,
+            "format": "text"
+        })
+    
     async def _output_to_console(self, content: Any, is_error: bool = False) -> None:
         """Output to console/terminal."""
         try:

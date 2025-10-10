@@ -173,7 +173,7 @@ class AppContext:
     code_generator: Optional[Any] = None
     codedb: Optional[Any] = None
 
-    # Basic tools (your new additions)
+    # Basic tools
     calculator: Optional[Any] = None
     file_reader: Optional[Any] = None
     process_monitor: Optional[Any] = None
@@ -305,7 +305,7 @@ async def bootstrap(config_path: Optional[Path]) -> "AppContext":
     ctx = AppContext(config=config)
 
     # --- LLM base ---
-    ctx.llm = safe_init(RitsuLLM, model="llama3.2:3b")
+    ctx.llm = safe_init(RitsuLLM, model="qwen2:0.5b")  # Very lightweight model for low-end PC
 
     # --- Core logic ---
     ctx.planner = safe_init(Planner, llm=ctx.llm)
@@ -391,6 +391,7 @@ async def bootstrap(config_path: Optional[Path]) -> "AppContext":
                 "nlp_engine": ctx.nlp,
                 "toolbelt": ctx.tools,
                 "output_manager": ctx.output_manager,
+                "llm_engine": ctx.llm,  # Add LLM for fallback responses
                 "calculator": ctx.calculator,
                 "file_reader": ctx.file_reader,
                 "process_monitor": ctx.process_monitor,
@@ -788,6 +789,11 @@ async def run(argv: Sequence[str]) -> int:
         ctx.config.setdefault("app", {})["safe_mode"] = True
 
     install_signal_handlers(ctx.shutdown_event)
+    
+    # Start output manager processing
+    if ctx.output_manager and hasattr(ctx.output_manager, 'start'):
+        await ctx.output_manager.start()
+        log.info("Output manager started")
 
     tasks: Dict[str, asyncio.Task] = {}
 

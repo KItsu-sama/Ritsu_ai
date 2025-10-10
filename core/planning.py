@@ -53,7 +53,12 @@ class Planner:
             Plan dictionary with actions, strategy, priority, etc. May include simulation_result or policy_violation.
         """
         try:
+            # Analyze once, then merge telemetry immediately so routing/strategy can consider it
             analysis = self._analyze_event(event)
+            if system_status:
+                # Attach system_status under a stable key for downstream decisions
+                analysis.setdefault("system_status", system_status)
+
             strategy = self._choose_strategy(analysis)
 
             # Internal router
@@ -88,9 +93,7 @@ class Planner:
                     },
                 )
             
-            analysis = self._analyze_event(event)
-            if system_status:
-                analysis.setdefault("system_status", system_status)
+            # analysis already computed and merged with system_status above
             return plan
 
         except Exception as e:

@@ -239,14 +239,19 @@ class SelfImprovementEngine:
                 self.generic_visit(node)
             
             def visit(self, node):
-                # Track nesting depth
-                if isinstance(node, (ast.If, ast.For, ast.While, ast.With, ast.Try)):
+                # Preserve the normal dispatch to specialized visit_* methods
+                return super().visit(node)
+
+            def generic_visit(self, node):
+                # Track nesting depth for compound statements when recursing
+                is_compound = isinstance(node, (ast.If, ast.For, ast.While, ast.With, ast.Try))
+                if is_compound:
                     self.current_depth += 1
                     self.max_depth = max(self.max_depth, self.current_depth)
-                    self.generic_visit(node)
+                    super().generic_visit(node)
                     self.current_depth -= 1
                 else:
-                    self.generic_visit(node)
+                    super().generic_visit(node)
             
             def _calculate_function_complexity(self, node):
                 """Calculate cyclomatic complexity for a function"""
@@ -300,15 +305,17 @@ class SelfImprovementEngine:
         """Check for issues specific to self-improvement"""
         issues = []
         
-        # Check for outdated patterns
-        if "print(" in content and "logging." not in content:
-            issues.append({
-                'type': 'outdated_logging',
-                'severity': 'medium',
-                'description': 'Using print() instead of proper logging',
-                'line': content.find("print(") + 1,
-                'fix_suggestion': 'Replace print() with logging.info() or appropriate level'
-            })
+        # Check for outdated print() usage per-line and report correct line numbers
+        lines = content.split('\n')
+        for i, ln in enumerate(lines, 1):
+            if 'print(' in ln and 'logging.' not in content:
+                issues.append({
+                    'type': 'outdated_logging',
+                    'severity': 'medium',
+                    'description': 'Using print() instead of proper logging',
+                    'line': i,
+                    'fix_suggestion': 'Replace print() with logging.info() or appropriate level'
+                })
         
         # Check for hardcoded values
         lines = content.split('\n')
