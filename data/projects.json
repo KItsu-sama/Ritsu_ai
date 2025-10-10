@@ -1,0 +1,64 @@
+{
+  "cefc0cca-7c44-457f-92ba-ede07f3a29a4": {
+    "id": "cefc0cca-7c44-457f-92ba-ede07f3a29a4",
+    "name": "Project Improvement",
+    "description": "Auto-generated project from todo list",
+    "status": "active",
+    "created_at": "2025-08-20T15:37:06.365584",
+    "tasks": [
+      "cf373029-35cd-4304-ad65-77cc251827ef",
+      "d05f944d-d188-4b7c-a70d-2c338ce202b0",
+      "32b5eeb5-9d20-4224-9433-59a529518acb",
+      "c52b6432-d41c-4cb0-bd68-5b30b7924f70"
+    ],
+    "goals": [],
+    "context": {}
+  },
+  "07416143-9cb3-4340-a0ae-f5d8987b8319": {
+    "id": "07416143-9cb3-4340-a0ae-f5d8987b8319",
+    "name": "Project Improvement",
+    "description": "Auto-generated project from todo list",
+    "status": "active",
+    "created_at": "2025-08-20T15:38:54.137443",
+    "tasks": [
+      "d7f7e9fe-e2d7-4169-889f-b5640854c59d",
+      "11bd45e3-0a7d-4868-b7fd-75025dee3a0b",
+      "493fad37-a70c-4c7c-a2be-7824065fe193",
+      "dbd77698-c897-4736-9037-d134baad61a1",
+      "ba9d7d05-2b66-4dc1-80ea-8fcc14e31637",
+      "380826ae-7a2f-47ff-bddd-36df22d4da99"
+    ],
+    "goals": [],
+    "context": {}
+  },
+  "071ee879-589e-4626-8f90-92007ec48018": {
+    "id": "071ee879-589e-4626-8f90-92007ec48018",
+    "name": "Project Improvement",
+    "description": "Auto-generated project from todo list",
+    "status": "active",
+    "created_at": "2025-08-20T15:53:22.155816",
+    "tasks": [
+      "53eefa74-11c3-404e-b799-5dca1cd0cd6c",
+      "23cc1904-afb0-4a98-a453-e1955e7df219",
+      "707b858b-7912-467c-92eb-19199bff5f36",
+      "00c4eab5-7e8f-4b12-b827-922de8f2ae18"
+    ],
+    "goals": [],
+    "context": {}
+  },
+  "1608c32c-bd51-49b3-9d31-8ca7e3193797": {
+    "id": "1608c32c-bd51-49b3-9d31-8ca7e3193797",
+    "name": "Project Improvement",
+    "description": "Auto-generated project from todo list",
+    "status": "active",
+    "created_at": "2025-08-20T16:51:20.283675",
+    "tasks": [
+      "ddc031bf-f925-4fde-99b9-8e73433abff2",
+      "4b8acef4-cd47-4836-816e-3e1d71b1a15e",
+      "d208d964-02dc-4341-a928-54ae725ff56b",
+      "39cc80db-891d-4dc9-b5b2-634e47a4c788"
+    ],
+    "goals": [],
+    "context": {}
+  }
+}

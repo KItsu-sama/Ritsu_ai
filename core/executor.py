@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 class ActionExecutor:
     """Executes actionable steps from solutions"""
     
-    def __init__(self, executor):  # Changed from 'engine' to 'executor'
+    def __init__(self, executor):
         self.executor = executor  # Reference to main Executor for coordination
         self.action_handlers = {
             "modify_code": self._handle_modify_code,
@@ -140,7 +140,7 @@ class ExecutionResult:
         self.start_time: Optional[float] = None
         self.end_time: Optional[float] = None
         self.duration: Optional[float] = None
-        # REMOVED: Don't instantiate dependencies here
+        # Note: Dependencies are injected via Executor components, not instantiated here
     
     def mark_started(self) -> None:
         """Mark execution as started."""
@@ -189,7 +189,7 @@ class Executor:
         # Initialize ActionExecutor with reference to self
         self.action_executor = ActionExecutor(self)
         
-        # Action handlers - ADDED recovery actions
+        # Action handlers - includes recovery actions
         self.action_handlers = {
             "ai_response": self._execute_ai_response,
             "tool_call": self._execute_tool_call,
@@ -198,7 +198,7 @@ class Executor:
             "nlp_analysis": self._execute_nlp_analysis,
             "output": self._execute_output,
             "error_response": self._execute_error_response,
-            # ADDED: Recovery action handlers
+            # Recovery action handlers
             "execute_solution": self._execute_solution_action,
             "shell_command": self._execute_shell_command,
             "delay": self._execute_delay_action,
@@ -209,8 +209,13 @@ class Executor:
         self.components.update(components)
         log.debug("Components set", extra={"components": list(components.keys())})
     
-    async def execute(self, plan: Dict[str, Any]) -> ExecutionResult:
-        """Execute a plan and return results."""
+    async def execute(self, plan: Dict[str, Any], context: Optional[Dict[str, Any]] = None) -> ExecutionResult:
+        """Execute a plan and return results.
+        
+        Args:
+            plan: The plan to execute
+            context: Optional execution context with system metrics, security level, etc.
+        """
         result = ExecutionResult()
         result.mark_started()
         
@@ -223,20 +228,23 @@ class Executor:
             log.debug("Executing plan", extra={
                 "plan_type": plan.get("type"),
                 "actions_count": len(actions),
-                "priority": plan.get("priority")
+                "priority": plan.get("priority"),
+                "has_context": context is not None
             })
             
-            # Execute actions
+            # Initialize execution context
+            execution_context = context or {}
+            
+            # Execute actions sequentially (parallelism can be added later)
             action_results = {}
-            context = {}  # Shared context between actions
             
             for i, action in enumerate(actions):
-                action_result = await self._execute_action(action, context)
+                action_result = await self._execute_action(action, execution_context)
                 action_results[f"action_{i}"] = action_result
                 
                 # Update context with results for next actions
                 if action_result.get("status") == "completed":
-                    context.update(action_result.get("data", {}))
+                    execution_context.update(action_result.get("data", {}))
                 else:
                     error_msg = f"Action {i} failed: {action_result.get('error', 'Unknown error')}"
                     result.errors.append(error_msg)
@@ -245,13 +253,28 @@ class Executor:
                         "action_type": action.get("type"),
                         "error": action_result.get("error")
                     })
+                if plan.get("allow_parallel", False):
+                    tasks = [self._execute_action(a, execution_context) for a in actions]
+                    results = await asyncio.gather(*tasks)
+                else:
+                    results = []
+                    for a in actions:
+                        results.append(await self._execute_action(a, execution_context))
             
+            if "memory_manager" in self.components:
+                mem = self.components["memory_manager"]
+                mem.save_event({
+                                "plan": plan,
+                        "result": result.to_dict(),
+                "timestamp": time.time()
+                })
+
             # Aggregate results
             final_results = {
                 "plan_type": plan.get("type"),
                 "actions_executed": len(actions),
                 "action_results": action_results,
-                "context": context,
+                "context": execution_context,
             }
             
             result.mark_completed(final_results)
@@ -264,8 +287,17 @@ class Executor:
         return result
     
     async def _execute_action(self, action: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute a single action."""
-        action_type = action.get("type", "unknown")
+        # live policy / safe mode check
+        policy_manager = self.components.get("policy_manager") or getattr(self, "policy_manager", None)
+        if policy_manager:
+            allowed, reason = policy_manager.validate_action(action)
+            if not allowed:
+                return {"status": "blocked", "error": f"Blocked by policy: {reason}"}
+        action_type = action.get("type")
+        if self.config.get("safe_mode", False):
+            if action_type in ("shell_command", "driver_update", "hardware_control"):
+                return {"status": "blocked", "error": "Action disabled in safe_mode"}
+
         
         try:
             if action_type in self.action_handlers:
@@ -350,9 +382,20 @@ class Executor:
         input_text = params.get("input_text", "")
         source = params.get("source", "unknown")
         
+        # Use system metrics from context if available
+        system_metrics = context.get("system_metrics", {})
+        security_level = context.get("security_level", "normal")
+        
         try:
-            # This would call your actual AI assistant
-            response = f"AI Response to: {input_text}"  # Placeholder
+            # Pass context to AI assistant if it supports it
+            if hasattr(self, "policy_manager"):
+                allowed = self.policy_manager.validate_action(action)
+                if not allowed:
+                    return {"status": "blocked", "error": "Action blocked by policy manager"}
+            else:
+                # Fallback to basic response
+                response = f"AI Response to: {input_text} (security: {security_level})"
+                
             return {
                 "status": "completed",
                 "data": {"response": response}
@@ -370,7 +413,9 @@ class Executor:
         command = params.get("command", "")
         
         try:
-            result = f"Tool execution: {command}"  # Placeholder
+            # Use system metrics from context for resource-aware execution
+            system_metrics = context.get("system_metrics", {})
+            result = f"Tool execution: {command} (with context)"
             return {
                 "status": "completed",
                 "data": {"tool_result": result}
@@ -388,6 +433,8 @@ class Executor:
         query = params.get("query", "")
         
         try:
+            # Use security level from context for access control
+            security_level = context.get("security_level", "normal")
             results = []  # Placeholder - would call memory_manager.search_memory(query)
             return {
                 "status": "completed",
@@ -475,3 +522,7 @@ class Executor:
             "available_components": list(self.components.keys()),
             "supported_actions": list(self.action_handlers.keys()),
         }
+    
+    def summarize_results(self, execution_result: ExecutionResult) -> str:
+        return f"[{execution_result.status.upper()}] {len(execution_result.results)} results, {len(execution_result.errors)} errors, {execution_result.duration:.2f}s"
+

@@ -230,32 +230,3 @@ def circumradius_right_triangle_from_altitude(AH: float, ratio_AB_over_AC: Tuple
     R = BC_val / 2.0
     return float(R), float(BC_val)
 
-# --------------------------- Examples / CLI --------------------------------
-
-if __name__ == '__main__':
-    # Example 1: Plot a triangle and related points
-    A = (0.0, 0.0)
-    B = (3.0, 0.0)
-    C = (0.0, 4.0)
-    fname1 = plot_triangle_and_related(A,B,C, fname='example_triangle.png')
-    print('Wrote', fname1)
-
-    # Example 2: Quadratic graph
-    fname2 = plot_quadratic(2, -1, 8, xrange=(-3,3), fname='example_quadratic.png')
-    print('Wrote', fname2)
-
-    # Example 3: Half-plane intersection from your inequalities
-    # convert user: 0 <= y <=5, x >=0, x+y-2 >=0, x-y-2 <=0
-    conds = [('y', '>=') , ('y-5', '<='), ('x', '>='), ('x+y-2', '>='), ('x-y-2', '<=')]
-    fname3 = plot_halfplanes(conds, fname='example_region.png')
-    print('Wrote', fname3)
-
-    # Example 4: Vector relation symbolic example
-    I = solve_vector_relations_example()
-    print('Example point I (symbolic coordinates):', I)
-
-    # Example 5: Right triangle circumradius
-    R, BC = circumradius_right_triangle_from_altitude(sp.Rational(12,5), (3,4))
-    print(f'For AH=12/5 and AB:AC=3:4 => BC={BC:.4f}, R={R:.4f}')
-
-    print('\nModule ready. Integrate functions into your assistant to compute and render other cases.')

@@ -1,39 +1,10 @@
 # =========================================
 # File: Cargo.toml
 # =========================================
-[package]
-name = "ritsu_rust_editor"
-version = "0.1.0"
-edition = "2021"
-authors = ["You <you@example.com>"]
-description = "GPU-accelerated, LSP-aware code editor core for Ritsu"
-license = "MIT"
-
-
 [features]
-# Opt-in GPU rendering via wgpu. When disabled, a Null backend is used.
-gpu = ["wgpu", "winit", "pollster"]
-
-
-[dependencies]
-anyhow = "1"
-thiserror = "1"
-ropey = "1"
-regex = "1"
-parking_lot = "0.12"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-bytes = "1"
-uuid = { version = "1", features = ["v4"] }
-log = "0.4"
-
-
-# Optional GPU stack
-wgpu = { version = "0.20", optional = true }
-winit = { version = "0.30", optional = true }
-pollster = { version = "0.3", optional = true }
-
-
-# Optional LSP/data types (we'll hand-roll minimal JSON-RPC, so keep this light)
-lsp-types = "0.95"
-url = "2"
+default = ["cpu-parallel"]
+cpu-parallel = ["rayon"]
+cuda = ["dep:cuda-driver"]
+opencl = ["dep:ocl"]
+vulkan = ["dep:vulkano"]
+metal = ["dep:metal"]

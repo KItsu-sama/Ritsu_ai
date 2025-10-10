@@ -315,7 +315,7 @@ class PolicyManager:
         return action_type in self.raw.get("ask_to_run", [])
 
 SETTINGS = {
-    "model": "llama3.1:8b-q5_K_M",  # Your LLaMA model name
+    "model": "llama3.1:8b-q5_K_M",
     "temperature": 0.7,
     "memory_file": "ritsu_memory.json",
     "short_term_file": "short_term_mem.json",

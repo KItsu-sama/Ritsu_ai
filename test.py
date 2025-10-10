@@ -1,5 +1,5 @@
 from __future__ import annotations
-from core.command_parser import CommandParser, CommandResult
+from input.command_parser import CommandParser, CommandResult
 """
 from core import 
 
@@ -46,3 +46,4 @@ if __name__ == "__main__":
     for example in examples:
         result = parser.parse(example, source="test")
         print(f"Input: {example!r}\nParsed: {result}\n")
+        print(120/2.5)

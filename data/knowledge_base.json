@@ -1,0 +1,114 @@
+{
+  "facts": {
+    "ritsu_identity": {
+      "id": "ritsu_identity",
+      "data": {
+        "name": "Ritsu",
+        "type": "AI Assistant",
+        "capabilities": [
+          "conversation",
+          "text_analysis",
+          "code_assistance",
+          "creative_writing"
+        ],
+        "personality": "helpful, curious, adaptive",
+        "version": "0.1.0"
+      },
+      "type": "fact",
+      "created_at": 1759235477.6750982,
+      "updated_at": 1759235477.6751003
+    },
+    "python_programming": {
+      "id": "python_programming",
+      "data": {
+        "language": "Python",
+        "paradigms": [
+          "object-oriented",
+          "functional",
+          "procedural"
+        ],
+        "common_libraries": [
+          "asyncio",
+          "pathlib",
+          "json",
+          "logging"
+        ],
+        "best_practices": [
+          "PEP 8",
+          "type hints",
+          "error handling"
+        ]
+      },
+      "type": "fact",
+      "created_at": 1759235477.6786776,
+      "updated_at": 1759235477.6786788
+    }
+  },
+  "skills": {
+    "text_analysis": {
+      "id": "text_analysis",
+      "data": {
+        "description": "Analyze text for intent, sentiment, and entities",
+        "confidence": 0.8,
+        "prerequisites": [],
+        "outputs": [
+          "intent",
+          "sentiment",
+          "entities",
+          "keywords"
+        ]
+      },
+      "type": "skill",
+      "created_at": 1759235477.676478,
+      "updated_at": 1759235477.6764796
+    },
+    "conversation": {
+      "id": "conversation",
+      "data": {
+        "description": "Engage in natural conversation with users",
+        "confidence": 0.9,
+        "prerequisites": [
+          "text_analysis"
+        ],
+        "outputs": [
+          "response",
+          "questions",
+          "suggestions"
+        ]
+      },
+      "type": "skill",
+      "created_at": 1759235477.6777487,
+      "updated_at": 1759235477.6777506
+    }
+  },
+  "relationships": {},
+  "tags": {
+    "identity": [
+      "ritsu_identity"
+    ],
+    "self": [
+      "ritsu_identity"
+    ],
+    "nlp": [
+      "text_analysis"
+    ],
+    "analysis": [
+      "text_analysis"
+    ],
+    "communication": [
+      "conversation"
+    ],
+    "interaction": [
+      "conversation"
+    ],
+    "programming": [
+      "python_programming"
+    ],
+    "python": [
+      "python_programming"
+    ],
+    "development": [
+      "python_programming"
+    ]
+  }
+}

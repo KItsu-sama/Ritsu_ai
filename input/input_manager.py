@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
 
+Ritsu_turn = False
 
 class InputManager:
     """Manages input from multiple sources and emits events."""
@@ -207,33 +208,42 @@ class InputManager:
     
     async def _handle_cli_input(self) -> Optional[Dict[str, Any]]:
         """Handle command line input."""
-        try:
-            # Use asyncio to run input() in a thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            user_input = await loop.run_in_executor(None, input, "Ritsu> ")
-            
-            if user_input.strip():
+
+        if not Ritsu_turn :
+            try:
+                # Use asyncio to run input() in a thread pool to avoid blocking
+                loop = asyncio.get_event_loop()
+                user_input = await loop.run_in_executor(None, input, "User> ")
+                
+                if user_input.strip():
+                    return {
+                        "content": user_input.strip(),
+                        "metadata": {"input_method": "keyboard"}
+                    }
+                
+                Ritsu_turn = True
+                
+            except EOFError:
+                # Handle Ctrl+D or EOF
                 return {
-                    "content": user_input.strip(),
-                    "metadata": {"input_method": "keyboard"}
+                    "content": "!quit",
+                    "metadata": {"input_method": "keyboard", "eof": True}
                 }
+            except KeyboardInterrupt:
+                # Handle Ctrl+C
+                return {
+                    "content": "!quit",
+                    "metadata": {"input_method": "keyboard", "interrupt": True}
+                }
+            except Exception as e:
+                log.error("CLI input error", extra={"error": str(e)})
             
-        except EOFError:
-            # Handle Ctrl+D or EOF
-            return {
-                "content": "!quit",
-                "metadata": {"input_method": "keyboard", "eof": True}
-            }
-        except KeyboardInterrupt:
-            # Handle Ctrl+C
-            return {
-                "content": "!quit",
-                "metadata": {"input_method": "keyboard", "interrupt": True}
-            }
-        except Exception as e:
-            log.error("CLI input error", extra={"error": str(e)})
-        
-        return None
+            return None
+        else:
+            await asyncio.sleep(1.0)  # Prevent tight loop
+            print("Ritsu> ", end="", flush=True )
+            Ritsu_turn = False
+            return None
     
     async def _handle_mic_input(self) -> Optional[Dict[str, Any]]:
         """Handle microphone input via STT."""

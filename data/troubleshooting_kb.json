@@ -1,0 +1,74 @@
+{
+  "solutions": {
+    "unicode_decode_error": {
+      "id": "unicode_fix",
+      "problem_pattern": "UnicodeDecodeError.*charmap.*can't decode",
+      "steps": [
+        "Add encoding='utf-8' parameter to subprocess calls",
+        "Add errors='replace' parameter for error handling",
+        "Test the subprocess call with proper encoding"
+      ],
+      "success_rate": 0.95,
+      "prerequisites": [
+        "subprocess module access"
+      ],
+      "risks": [
+        "May mask other encoding issues"
+      ]
+    },
+    "high_cpu_usage": {
+      "id": "cpu_optimization",
+      "problem_pattern": "CPU usage.*high|CPU.*100%",
+      "steps": [
+        "Identify top CPU-consuming processes",
+        "Check for infinite loops in code",
+        "Reduce monitoring frequency",
+        "Add sleep intervals in loops",
+        "Optimize heavy operations"
+      ],
+      "success_rate": 0.85,
+      "prerequisites": [
+        "system monitoring access"
+      ],
+      "risks": [
+        "May affect performance monitoring accuracy"
+      ]
+    },
+    "alert_spam": {
+      "id": "alert_cooldown",
+      "problem_pattern": "alert.*spam|too many.*warning|repeated.*alert",
+      "steps": [
+        "Implement cooldown periods between alerts",
+        "Raise alert thresholds to appropriate levels",
+        "Add alert deduplication logic",
+        "Log alerts to files instead of console"
+      ],
+      "success_rate": 0.9,
+      "prerequisites": [
+        "alert system access"
+      ],
+      "risks": [
+        "May miss critical alerts during cooldown"
+      ]
+    },
+    "ollama_connection_error": {
+      "id": "ollama_fallback",
+      "problem_pattern": "ollama.*not.*responding|ollama.*error|model.*not.*exist",
+      "steps": [
+        "Check if Ollama server is running",
+        "Verify model exists and is accessible",
+        "Implement fallback response system",
+        "Add proper error handling and timeouts",
+        "Consider alternative models or API endpoints"
+      ],
+      "success_rate": 0.8,
+      "prerequisites": [
+        "ollama CLI access"
+      ],
+      "risks": [
+        "May degrade response quality in fallback mode"
+      ]
+    }
+  },
+  "updated_at": "2025-08-19T22:28:05.799768"
+}

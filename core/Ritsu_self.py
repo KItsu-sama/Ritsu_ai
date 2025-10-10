@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 """
+core/Ritsu_self.py 
+
 Ritsu Core (aka Ritsu_self)
 Acts as the brain of Ritsu. Wraps the LLM, memory, and planning logic.
 Supports both normal + streaming responses.
-"""
-"""
-core/Ritsu_self.py
 
 RitsuSelf — evolving metadata + self-reflection
 - Stores traits, goals, and reflections

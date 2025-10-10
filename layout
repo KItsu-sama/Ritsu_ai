@@ -15,6 +15,10 @@ Warp
 with his auto Ai power engine
 """
 
+# try to do this the the least or no cost possible (for now)
+# try to make this as modular as possible so its easy to upgrade parts later on
+
+
 
 ritsu/
 │── main.py
@@ -22,58 +26,99 @@ ritsu/
 ├── core/                        # Ritsu’s brain
 │   ├── Ritsu_self.py            # evolving metadata, self-reflection
 │   ├── event_manager.py         # central dispatcher for events
-│   ├── planning.py              # decides goals + next step
+│   ├── planning.py              # decides goals + next step (CoT source)
 │   ├── executor.py              # executes chosen plan
 │   ├── troubleshooter.py        # fixes failures, retries
-│   ├── self_improvement.py      # Allows Ritsu to analyze, understand, and improve its own codebase over time
+│   ├── self_improvement.py      # analyzes, understands, improves its own codebase
 │   ├── tools.py                 # utility calls (APIs, sys commands)
-│   ├── code_analyzer.py         # Python side code reasoning
+│   ├── code_analyzer.py         # Python code reasoning (review, optimize)
 │   ├── code_generator.py        # Python LLM-based code writer
 │   ├── codedb.py                # stores code snippets/knowledge
-        shell_executor.py       # runs shell commands
-        command_classifier.py   # classifies input type
-        command_parser.py       # parses input commands
-
-├── Tool/                        # external tools
-│   ├── calculator.py            # basic calculator tool
-│   ├── file_reader.py           # simple file reader tool
-│   ├── process_monitor.py       # basic process monitoring (CPU/mem/uptime)
+│   ├── shell_executor.py        # runs shell commands (multi-shell)
+│   ├── command_classifier.py    # classifies input type (shell, code, query)
+│   ├── cot_logger.py            # Warp-style visible reasoning + logs
+│   └── tool/                    # smaller utilities & tools
+│       ├── file_reader.py       # reads files for code analysis
+│       ├── process_monitor.py   # monitors CPU/mem/uptime
+│       └── math/
+│           ├── calculator.py    # basic calculator
+│           ├── math_shape_draw.py # graph/geometry drawer
+│           └── algebra.py       # equations, matrices, proofs
 │
 ├── input/                       # Handling input
 │   ├── input_manager.py         # decides: mic, chat, file
-│   ├── stt.py          # mic input → speech-to-text
+│   ├── stt.py                   # mic input → speech-to-text
 │   ├── chat_listener.py         # chat input (Twitch/Discord/etc.)
-│   ├── command_parser.py        # parse system commands vs natural
+│   └── command_parser.py        # parse: system commands vs natural
 │
 ├── output/                      # Handling output
 │   ├── output_manager.py        # central output handler
-│   ├── tts.py            # speech synthesis
+│   ├── tts.py                   # speech synthesis
 │   ├── avatar_animator.py       # 2D/3D model expressions
-│   ├── stream_adapter.py        # connects to stream overlay/UI
+│   └── stream_adapter.py        # connects to stream overlay/UI
 │
 ├── llm/
-│   ├── ritsu_llm.py             # local Ollama wrapper (your template)
+│   ├── ritsu_llm.py             # local Ollama wrapper
 │   ├── prompt_templates.py      # reusable prompts/system messages
-│   └── adapters/                #future adapters (ex: vLLM, Rust inference, etc.)
+│   └── adapters/                # future adapters (ex: vLLM, Rust inference)
 │
 ├── ai/                          # NLP & memory
 │   ├── nlp_engine.py            # intent detection, embeddings
 │   ├── knowledge_base.py        # structured facts/skills
-│   ├── memory_manager.py        # short + long-term memory
+│   └── memory_manager.py        # short + long-term memory
 │
 ├── system/
 │   ├── config_manager.py        # loads configs
 │   ├── logger.py                # logging + debugging
-│   ├── bindings_rust.py         # FFI wrapper for Rust editor
-│   ├── bindings_ui.py           # IPC/bridge to C# UI
+│   ├── cot_formatter.py         # pretty-prints CoT logs (separate from storage)
+│   ├── security.py              # tamper detection, obfuscation, license check
+│   ├── trust_protocol.py        # handles user confirmations, trust rules
+│   ├── bindings_rust.py         # FFI wrapper for Rust GPU editor
+│   └── bindings_ui.py           # IPC/bridge to C# UI
+│   └── performance_monitor.py   # Performance monitoring
 │
 ├── rust_editor/                 # Rust GPU code editor
 │   ├── src/
-│   │   ├── lib.rs               # core logic (syntax, GPU accel)
-│   │   ├── analyzer.rs          # static analysis
-│   │   ├── formatter.rs         # formatting / beautify
-│   │   ├── lsp_bridge.rs        # connect to LSP or Python
-│   └── Cargo.toml
+│   │   ├── lib.rs               # Main entry point and exports
+│   │   ├── error.rs           
+│   │   ├── gpu/
+│   │   │   ├── mod.rs           # GPU module exports
+│   │   │   ├── cuda.rs          # CUDA-specific implementations
+│   │   │   ├── opencl.rs        # OpenCL implementations  
+│   │   │   ├── vulkan.rs        # Vulkan compute shaders
+│   │   │   └── metal.rs         # Metal backend (macOS)
+│   │   ├── analysis/
+│   │   │   ├── mod.rs           # Analysis module exports
+│   │   │   ├── syntax.rs        # Syntax parsing and AST
+│   │   │   ├── complexity.rs    # Code complexity analysis
+│   │   │   ├── patterns.rs      # Pattern matching and detection
+│   │   │   └── metrics.rs       # Code quality metrics
+│   │   ├── formatting/
+│   │   │   ├── mod.rs           # Formatting exports
+│   │   │   ├── beautifier.rs    # Code beautification
+│   │   │   ├── minifier.rs      # Code minification
+│   │   │   └── standardizer.rs  # Coding standards
+│   │   ├── parallel/
+│   │   │   ├── mod.rs           # Parallel processing
+│   │   │   ├── thread_pool.rs   # Thread management
+│   │   │   ├── data_flow.rs     # Data flow optimization
+│   │   │   └── batch_ops.rs     # Batch operations
+│   │   ├── bindings/
+│   │   │   ├── mod.rs           # Bindings exports
+│   │   │   ├── python.rs        # Python FFI bindings
+│   │   │   ├── cpp.rs           # C++ bindings
+│   │   │   └── ffi_utils.rs     # FFI utilities
+│   │   └── utils/
+│   │       ├── mod.rs           # Utilities exports
+│   │       ├── memory.rs        # Memory management
+│   │       ├── profiling.rs     # Performance profiling
+│   │       └── error.rs         # Error handling
+            cpu/
+                mod.rs
+
+│   ├── Cargo.toml               # Rust dependencies
+│   ├── build.rs                 # Build script for GPU detection
+│   └── target/                  # Build output
 │
 ├── ui/                          # C# stream interface
 │   ├── Program.cs               # entry point for UI
@@ -82,20 +127,14 @@ ritsu/
 │   ├── ChatOverlay.cs           # Twitch/Discord overlay
 │   ├── LoggerConsole.cs         # debug console
 │   └── RitsuUI.csproj
+│
 └── data/
-    ├── memory.json           # long-term memory
-    ├── logs/                 # logging output
-    └── knowledge_base.json   # facts, embeddings (future)
+    ├── memory.json              # long-term memory
+    ├── logs/                    # logging output + CoT traces
+    └── knowledge_base.json      # facts, embeddings (future)
 
-#how InputManager should be call
 
-from input_manager import InputManager
 
-im = InputManager(use_mic=True)   # enable mic listener
-raw = im.capture_input()          # tries mic first, then keyboard
-parsed = im.preprocess(raw)
-
-print(parsed)
 
 
 #======TTS and STT=========
@@ -326,6 +365,71 @@ fn render(frame_time) {
 
 InputManager → EventManager → RitsuCore → OutputManager
 Input → EventManager → RitsuCore.process_stream → LLM Engine → yield tokens → OutputManager (TTS, avatar).
+
+RITSU = LAM Framework with:
+├── Core SLM (reasoning engine)
+├── Tool Library:
+│   ├── ProcessManager (kill, prioritize, analyze)
+│   ├── FileSystem (read, write, cleanup)
+│   ├── NetworkMonitor (traffic analysis)
+│   ├── HardwareControl (fans, RGB, power)
+│   ├── PackageManager (install, update, rollback)
+│   └── CodeAnalyzer (debug, optimize, refactor)
+├── Planning Module (multi-step task execution)
+└── Memory System (learns from past actions)
+
+Ritsu MoE Architecture:
+├── Expert 1: Code & Debugging
+├── Expert 2: System Performance  
+├── Expert 3: Network & Security
+├── Expert 4: Hardware Control
+└── Router: Decides which expert to use
+
+Primary Brain: Mistral 7B (SLM) - Fine-tuned for technical tasks
+├── Framework: LAM (LangChain Agents)
+├── Tools: System APIs, CLI commands, file operations
+├── Memory: Vector DB (past troubleshooting solutions)
+├── Fallback: GPT-4 API (complex code generation only)
+└── Hybrid Layer: Rule-based for simple metrics
+
+Capabilities Needed:
+Autonomous system management
+ulti-step troubleshooting  
+Code analysis and debugging
+Hardware control with learning
+Runs 100% offline
+
+
+
+
+[User] <-> [CLI / Terminal UI / Local API]
+               |
+           [Planner]
+               |
+        +------+------+-------+
+        |             Router  |
+     MoE Router  ------------> Expert pool
+        |                     ├─ Expert: Code & Debugging (static analyzer)
+        |                     ├─ Expert: System Performance (telemetry analyzer)
+        |                     ├─ Expert: Network & Security (flow + IDS)
+        |                     └─ Expert: Hardware Control (fan/volt/temp)
+               |
+           [Core SLM: Mistral-7B]
+               |
+      +--------+--------+----------------+
+      | Tools (system APIs, CLI wrappers)|
+      |  - ProcessManager                  |
+      |  - FileSystem                      |
+      |  - NetworkMonitor                  |
+      |  - HardwareControl                 |
+      |  - PackageManager                  |
+      |  - CodeAnalyzer                    |
+      +------------------------------------+
+               |
+        [Memory Layer (local vector DB + logs)]
+               |
+        [UI / Telemetry Plane / Audit Logs]
+
 """
 1. Modularity and Interfaces
 Clear Interfaces: Ensure each module has a well-defined interface (input/output contracts). For example, InputManager should clearly specify what kind of data it outputs (raw text, parsed commands, etc.).

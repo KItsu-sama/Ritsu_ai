@@ -1,71 +1,65 @@
-# =========================================
-# File: src/lib.rs
-# =========================================
-//! Ritsu Rust Editor Core
-//! - Rope-based text buffer
-//! - Optional GPU backend (feature = "gpu")
-//! - Lightweight static analyzer + formatter
-//! - JSON-RPC LSP bridge for smart IDE features
+mod error;
+mod cpu;
+mod gpu;
 
+use error::RustEditorError;
+use crate::cpu::CPUExecutor;
+use crate::gpu::GPUExecutor;
 
-mod analyzer;
-mod formatter;
-mod lsp_bridge;
+mod analysis_result;
+pub use analysis_result::AnalysisResult;
 
-
-use anyhow::Result;
-use ropey::Rope;
-use std::{path::PathBuf, fs, io::Write};
-use uuid::Uuid;
-
-
-pub use analyzer::{AnalyzerIssue, AnalyzerSeverity, AnalyzerSummary};
-pub use formatter::{FormatOptions, format_rust_like};
-pub use lsp_bridge::{LspBridge, LspEvent, LspRequestId};
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Position { pub line: usize, pub column: usize }
-
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Range { pub start: Position, pub end: Position }
-
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Edit { pub range: Range, pub text: String }
-
-
-#[derive(Debug, Default)]
-pub struct Editor {
-id: Uuid,
-rope: Rope,
-file_path: Option<PathBuf>,
-cursor: Position,
-undo: Vec<Edit>,
-redo: Vec<Edit>,
+pub trait CodeExecutor: Send + Sync {
+    fn analyze_code(&self, code: &str) -> Result<AnalysisResult, RustEditorError>;
+    fn format_code(&self, code: &str) -> Result<String, RustEditorError>;
+    // ... other methods
 }
 
-
-impl Editor {
-pub fn new() -> Self {
-Self { id: Uuid::new_v4(), rope: Rope::new(), file_path: None, cursor: Position{line:0, column:0}, undo: vec![], redo: vec![] }
+// We define AnalysisResult here for now.
+#[derive(Debug, Clone)]
+pub struct AnalysisResult {
+    // ... we'll define later
 }
 
-
-pub fn open_from_str(path: Option<PathBuf>, text: &str) -> Self {
-let mut ed = Self::new();
-ed.rope = Rope::from_str(text);
-ed.file_path = path;
-ed
+pub struct RustEditor {
+    executor: Box<dyn CodeExecutor>,
 }
 
+impl RustEditor {
+    pub fn new(use_gpu: bool) -> Result<Self, RustEditorError> {
+        let executor: Box<dyn CodeExecutor> = if use_gpu {
+            match GPUExecutor::new() {
+                Ok(gpu_executor) => Box::new(gpu_executor),
+                Err(e) => {
+                    eprintln!("Failed to initialize GPU executor: {}. Falling back to CPU.", e);
+                    Box::new(CPUExecutor::new())
+                }
+            }
+        } else {
+            Box::new(CPUExecutor::new())
+        };
 
-pub fn open_from_file(path: impl Into<PathBuf>) -> Result<Self> {
-let path = path.into();
-let text = fs::read_to_string(&path)?;
-Ok(Self::open_from_str(Some(path), &text))
+        Ok(Self { executor })
+    }
+
+    pub fn analyze_code(&self, code: &str) -> Result<AnalysisResult, RustEditorError> {
+        self.executor.analyze_code(code)
+    }
+
+    pub fn format_code(&self, code: &str) -> Result<String, RustEditorError> {
+        self.executor.format_code(code)
+    }
 }
 
+// We also need to implement the Python bindings.
 
+#[cfg(feature = "python")]
+use pyo3::prelude::*;
+
+#[cfg(feature = "python")]
+#[pymodule]
+fn ritsu_rust(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_class::<RustEditor>()?;
+    // ... other bindings
+    Ok(())
 }

@@ -213,33 +213,9 @@ class Calculator:
         for i in range(2, n + 1):
             result *= i
         return result
-
-
-
-
-
-
-
-
-
-
-
-
-
-if __name__ == "__main__":
-    # Hàm mục tiêu: f(x,y) = x - 2y
-    def obj(x, y): return x - 2*y
-
-    # bounds: [(lb_x, ub_x), (lb_y, ub_y)]
-    bounds = [(0, None), (0, 5)]  # x >=0, 0 <= y <= 5
-
-    # lines: (a, b, c, op) = a*x + b*y (<= or >=) c
-    lines = [
-        (1, 1, 2, ">="),   # x + y >= 2
-        (1, -1, 2, "<="),  # x - y <= 2
-    ]
-
-    val, pt = Calculator.solve_2d_lp(bounds, lines, obj, minimize=True)
-    print("Giá trị tối ưu:", val)
-    print("Tại điểm:", pt)
-
+    
+    def combinations(self, n: int, r: int) -> int:
+        """Return the number of combinations of n items taken r at a time."""
+        if r > n or n < 0 or r < 0:
+            return "Error: Invalid values for n and r"
+        return self.factorial(n) // (self.factorial(r) * self.factorial(n - r))

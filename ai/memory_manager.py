@@ -39,6 +39,10 @@ class MemoryManager:
         
         # Load existing memory
         self._load_memory()
+
+    async def get_user_patterns(self):
+        # Return dummy data or implement as needed
+        return []
     
     def _load_memory(self) -> None:
         """Load memory from persistent storage."""
