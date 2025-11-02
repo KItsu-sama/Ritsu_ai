@@ -1,0 +1,160 @@
+{
+  "long_term": [
+    {
+      "user": {
+        "role": "user",
+        "content": "suprise me with an infomation any random fact will do"
+      },
+      "assistant": {
+        "role": "assistant",
+        "content": "\"Fact of the day: The smallest unit of measure in the universe. It is one and only one mole of atoms.\""
+      },
+      "summary": "Outcome: success; Topics: trivia",
+      "importance": 0.734,
+      "timestamp": 1760280463.1612837
+    },
+    {
+      "timestamp": 1760531589.479894,
+      "summary": "User: go on Ritsu: \"Unit of measurement? Just as I would expect when talking about units of measurement, it is clear that you are referring to a mole of atoms. A mole is approximately 6.02x10^23 atoms in one gram of matter. This means that there are 6.02x10^23 atoms in every single gram of matter.\" ...",
+      "recent_topics": {
+        "conversation": 1,
+        "help": 1,
+        "creative": 1,
+        "trivia": 1
+      },
+      "context_snapshot": {
+        "last_user_input": "hello Ritsu",
+        "last_source": "unknown",
+        "interaction_count": 1,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1760679512.6051087,
+      "summary": "User: hello Ritsu Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "hello Ritsu",
+        "last_source": "unknown",
+        "interaction_count": 1,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761143183.6814408,
+      "summary": "User: hello Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "hello",
+        "last_source": "unknown",
+        "interaction_count": 1,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761306550.0094767,
+      "summary": "User: Hello Ritsu: Hi there!",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "Hello",
+        "last_source": "unknown",
+        "interaction_count": 1,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761310005.3519099,
+      "summary": "User: {'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 374726.249189, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}} Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "{'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 374726.249189, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}}",
+        "last_source": "unknown",
+        "interaction_count": 1,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761323033.5192816,
+      "summary": "User: {'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 387754.3349329, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}} Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "{'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 388352.7692525, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}}",
+        "last_source": "unknown",
+        "interaction_count": 2,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761323631.8628342,
+      "summary": "User: {'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 388352.7692525, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}} Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "{'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 388352.7692525, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}}",
+        "last_source": "unknown",
+        "interaction_count": 2,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761396746.0149646,
+      "summary": "User: {'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 461469.7459107, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}} Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "{'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 461469.7459107, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}}",
+        "last_source": "unknown",
+        "interaction_count": 1,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761396963.4618676,
+      "summary": "User: {'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 461687.271376, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}} Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "{'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 462238.0152009, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}}",
+        "last_source": "unknown",
+        "interaction_count": 3,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761397356.0518281,
+      "summary": "User: {'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 462079.8318499, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}} Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "{'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 462238.0152009, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}}",
+        "last_source": "unknown",
+        "interaction_count": 3,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    },
+    {
+      "timestamp": 1761397514.322645,
+      "summary": "User: {'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 462238.0152009, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}} Ritsu: [Error: Generation timeout]",
+      "recent_topics": {},
+      "context_snapshot": {
+        "last_user_input": "{'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 462238.0152009, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}}",
+        "last_source": "unknown",
+        "interaction_count": 3,
+        "topics": []
+      },
+      "note": "Auto-summarized due to system stress (async)."
+    }
+  ],
+  "recent": [],
+  "context": {
+    "last_user_input": "{'role': 'user', 'content': '', 'source': 'unknown', 'timestamp': 462238.0152009, 'context': {'system_metrics': {}, 'security_level': 'normal', 'plan_type': 'direct_response', 'plan_id': 'unknown'}}",
+    "last_source": "unknown",
+    "interaction_count": 3
+  }
+}

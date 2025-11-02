@@ -108,20 +108,33 @@ class EventManager:
 
         self.logger.info(f"[Input Event] From {source}: {content}")
 
-        # 1. System command (e.g., "!help")
+        # 1. If a parsed_command is present (from CommandParser), handle it here.
+        parsed = event.get("parsed_command")
+        if parsed and getattr(parsed, "type", None) == "system":
+            await self._handle_parsed_system_command(parsed, source)
+            return
+
+        # Backwards-compatible: legacy simple prefix-based system commands (e.g., "!help")
         if content.startswith("!"):
             await self._handle_command(content)
             return
 
-        # 2. Tool call (e.g., "calc 2+2")
+        # 2. Tool call (e.g., "calc 2+2") — keep handling here
         if await self._check_tool(content):
             return
 
-        # 3. Default: send to core AI
-        if self.ritsu_core:
-            response = await self.ritsu_core.process(content, source=source)
-            if self.output_manager:
-                await self.output_manager.send(response, target=source)
+        # 3. Default: enqueue standardized 'user_input' event for core loop to process.
+        # This avoids the EventManager directly calling core/executor/output and causing
+        # duplicate outputs when the core_loop is also active.
+        standardized = {
+            "type": "user_input",
+            "content": content,
+            "source": source,
+            "timestamp": asyncio.get_event_loop().time(),
+        }
+
+        # Put onto the event queue so the core_loop can pick it up and generate a plan.
+        await self.queue.put(standardized)
 
     async def _handle_command(self, content: str) -> None:
         """Handle system commands prefixed with '!'."""
@@ -156,6 +169,44 @@ class EventManager:
                     await self.output_manager.send(result)
                 return True
         return False
+
+    async def _handle_parsed_system_command(self, parsed_cmd, source: str) -> None:
+        """Handle a parsed CommandResult of type 'system' from CommandParser.
+
+        This prevents system commands (like /reload) being forwarded to the planner/LLM.
+        The implementation below provides safe, minimal operations and acknowledges the user.
+        """
+        try:
+            cmd = getattr(parsed_cmd, "command", "")
+            flags = getattr(parsed_cmd, "flags", {}) or {}
+
+            log.info("Parsed system command received", extra={"cmd": cmd, "flags": flags})
+
+            # Implement a few safe system commands locally
+            if cmd == "help":
+                msg = "Available commands: /reload, /restart, /status, /help"
+            elif cmd == "status":
+                msg = "System status: nominal"  # lightweight placeholder
+            elif cmd == "reload":
+                # If user requested --all, attempt to reload core components (best-effort simulated)
+                if any(k.endswith("all") or k == "--all" for k in flags.keys()):
+                    msg = "Reloading all components (simulated)."
+                else:
+                    msg = "Reloading configuration (simulated)."
+                # Note: a full reload would reinitialize components; keep safe here.
+            elif cmd == "restart":
+                msg = "Restart requested. Please restart the application to complete." 
+            else:
+                msg = f"Unknown system command: {cmd}"
+
+            # Send acknowledgment via output manager if available
+            if self.output_manager and hasattr(self.output_manager, "send"):
+                await self.output_manager.send(msg)
+            else:
+                log.info(msg)
+
+        except Exception as e:
+            log.exception("Failed to handle parsed system command", extra={"error": str(e)})
 
     # ------------------------- Utilities -------------------------
     def listener_count(self, event_type: Optional[str] = None) -> int:

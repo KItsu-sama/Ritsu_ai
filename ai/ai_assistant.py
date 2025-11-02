@@ -13,6 +13,8 @@ AIAssistant — main AI logic coordination
 import asyncio
 import logging
 from typing import Any, AsyncGenerator, Dict, List, Optional, Union
+import asyncio
+import inspect
 
 log = logging.getLogger(__name__)
 
@@ -65,6 +67,7 @@ class AIAssistant:
             Response string or async generator for streaming
         """
         try:
+            log.debug("AIAssistant.process_input: start", extra={"source": source, "preview": input_text[:160]})
             # Update conversation history
             user_message = {
                 "role": "user",
@@ -77,6 +80,7 @@ class AIAssistant:
             
             # Analyze input intent and extract key information
             analysis = await self._analyze_input(input_text, context)
+            log.debug("AIAssistant.process_input: analysis", extra={"intent": analysis.get("intent"), "requires_tools": analysis.get("requires_tools")})
             
             # Determine response mode
             response_mode = self._determine_response_mode(analysis)
@@ -183,6 +187,7 @@ class AIAssistant:
     async def _generate_response(self, response_generator, analysis: Dict[str, Any]) -> str:
         """Generate a complete response."""
         try:
+            log.debug("AIAssistant._generate_response: invoking generator", extra={"mode_preview": analysis.get("complexity", "?")})
             return await response_generator(analysis)
         except Exception as e:
             log.error("Response generation failed", extra={"error": str(e), "analysis": analysis})
@@ -213,10 +218,17 @@ class AIAssistant:
         """Generate a direct, conversational response."""
         if self.llm:
             try:
-                # Use LLM for response generation
-                prompt = self._build_prompt(analysis, "direct")
-                response = await self.llm.generate(prompt)
-                return response.strip()
+                # Use LLM for response generation - RitsuLLM expects a dict
+                text = analysis["text"]
+                source = analysis["context"].get("source", "user")
+                user_dict = {source: text}
+                maybe = self.llm.generate_response(user_dict, mode=0)
+                # Support both sync and async LLM interfaces
+                if inspect.isawaitable(maybe):
+                    response = await maybe
+                else:
+                    response = maybe
+                return (response or "").strip()
             except Exception as e:
                 log.warning("LLM generation failed, using fallback", extra={"error": str(e)})
         
@@ -227,9 +239,15 @@ class AIAssistant:
         """Generate an analytical, detailed response."""
         if self.llm:
             try:
-                prompt = self._build_prompt(analysis, "analytical")
-                response = await self.llm.generate(prompt)
-                return response.strip()
+                text = analysis["text"]
+                source = analysis["context"].get("source", "user")
+                user_dict = {source: text}
+                maybe = self.llm.generate_response(user_dict, mode=0)  # Professional mode
+                if inspect.isawaitable(maybe):
+                    response = await maybe
+                else:
+                    response = maybe
+                return (response or "").strip()
             except Exception as e:
                 log.warning("LLM generation failed, using fallback", extra={"error": str(e)})
         
@@ -239,9 +257,15 @@ class AIAssistant:
         """Generate a creative response."""
         if self.llm:
             try:
-                prompt = self._build_prompt(analysis, "creative")
-                response = await self.llm.generate(prompt)
-                return response.strip()
+                text = analysis["text"]
+                source = analysis["context"].get("source", "user")
+                user_dict = {source: text}
+                maybe = self.llm.generate_response(user_dict, mode=1)  # Creative mode
+                if inspect.isawaitable(maybe):
+                    response = await maybe
+                else:
+                    response = maybe
+                return (response or "").strip()
             except Exception as e:
                 log.warning("LLM generation failed, using fallback", extra={"error": str(e)})
         

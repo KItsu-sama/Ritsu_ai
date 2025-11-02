@@ -123,6 +123,29 @@ class RitsuSelf:
         log.debug("Added reflection", extra={"reflection": reflection})
         return reflection
 
+    def process_classified_interaction(self, classification: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a classification result from command_classifier.py and analyze it."""
+        interaction = {
+            "text": classification.get("intent", "Unknown intent"),  # e.g., "query_ai"
+            "metadata": classification.get("metadata", {}),
+        }
+        signals = self.analyze_interaction(interaction)  # Use existing method
+        self.update_metadata(signals)  # Update traits based on signals
+        self.reflect(f"Processed classified intent: {classification.get('intent')}")
+        return signals  # Return for further use
+    
+    def process_parsed_command(self, parsed_result: Dict[str, Any]) -> Dict[str, Any]:
+        """Process a parsed command from command_parser.py and analyze it."""
+        interaction = {
+            "text": parsed_result.get("command", "Unknown command"),  # e.g., "restart"
+            "args": parsed_result.get("args", []),
+            "flags": parsed_result.get("flags", {}),
+        }
+        signals = self.analyze_interaction(interaction)  # Treat as interaction
+        self.update_metadata(signals)  # Update traits
+        self.reflect(f"Processed parsed command: {parsed_result.get('command')}")
+        return signals  # Return for execution or response
+
     # ------------------------- Convenience -------------------------
     def get_state(self) -> Dict[str, Any]:
         return {

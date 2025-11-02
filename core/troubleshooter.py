@@ -20,6 +20,8 @@ import os
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
+from core.executor import ActionExecutor
+from config.config import _model_
 from dataclasses import dataclass
 
 
@@ -425,7 +427,7 @@ class TroubleshootingEngine:
                     {
                         "action": "switch_model",
                         "target": "fallback",
-                        "parameters": {"model": "gemma:2b"},
+                        "parameters": {"model": _model_},
                         "description": "Switch to fallback model"
                     },
                     {

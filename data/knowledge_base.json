@@ -42,6 +42,15 @@
       "type": "fact",
       "created_at": 1759235477.6786776,
       "updated_at": 1759235477.6786788
+    },
+    "test_fact": {
+      "id": "test_fact",
+      "data": {
+        "value": "test"
+      },
+      "type": "fact",
+      "created_at": 1761371167.1257303,
+      "updated_at": 1761371167.1257327
     }
   },
   "skills": {

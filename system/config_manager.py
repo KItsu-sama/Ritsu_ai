@@ -191,12 +191,8 @@ SNIPPETS_FILE = APP_DIR / "code_snippets.json"
 MEMORY_FILE = APP_DIR / "ritsu_memory.json"
 SHORT_TERM_FILE = APP_DIR / "short_term_mem.json"
 
-# === LOGGING ===
-logging.basicConfig(level=logging.INFO, filename=str(LOG_FILE), filemode="a",
-                    format="%(asctime)s | %(levelname)s | %(message)s")
-console = logging.StreamHandler()
-console.setLevel(logging.INFO)
-logging.getLogger('').addHandler(console)
+# NOTE: logging.basicConfig() is NOT called here because it hangs on Windows
+# Logging setup is handled in main.py's setup_logging() function
 
 # === DEFAULTS ===
 DEFAULT_CONFIG = {

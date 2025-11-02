@@ -732,23 +732,39 @@ class SelfImprovementEngine:
         return sum(a.maintainability_score for a in analyses) / len(analyses)
     
     def _calculate_security_score(self, analyses: List[CodeAnalysis]) -> float:
-        """Calculate security score"""
-        if not analyses:
-            return 0.0
-        
-        scores = []
-        for analysis in analyses:
-            score = 100
+            """Calculate security score"""
+            if not analyses:
+                return 0.0
             
-            # Penalty for security-related issues
-            security_issues = sum(1 for issue in analysis.issues 
-                                if issue.get('type') in ['hardcoded_config', 'missing_error_handling'])
-            score -= security_issues * 15
+            scores = []
+            for analysis in analyses:
+                score = 100.0
+                
+                # Penalties based on detected issue types
+                issue_counts = {}
+                for issue in analysis.issues:
+                    issue_type = issue.get('type')
+                    issue_counts[issue_type] = issue_counts.get(issue_type, 0) + 1
+                
+                # High-severity penalties
+                score -= issue_counts.get('hardcoded_config', 0) * 20.0  # Significant penalty
+                
+                # Medium-severity penalties
+                score -= issue_counts.get('missing_error_handling', 0) * 5.0
+                
+                # Low-severity penalties (e.g., using print for sensitive info, though not currently checked)
+                score -= issue_counts.get('outdated_logging', 0) * 1.0 
+                
+                # Penalty for low documentation/lack of tests (indirect security risk)
+                doc_coverage = analysis.metrics.get('docstring_coverage', 0)
+                if doc_coverage < 30:
+                    score -= 5.0
+                
+                scores.append(max(0.0, score))
             
-            scores.append(max(0, score))
-        
-        return sum(scores) / len(scores)
-    
+            # Security score is the average of file scores
+            return sum(scores) / len(scores)
+
     def _calculate_complexity_score(self, metrics: Dict) -> float:
         """Calculate complexity score for a file"""
         complexity = metrics.get('complexity', 0)

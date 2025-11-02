@@ -368,3 +368,7 @@ class NLPBenchmark:
         print(f"Average processing time: {avg_time:.2f}ms")
         print(f"Total processing time: {total_time:.2f}s")
         print(f"Processed {len(texts) * iterations} texts")
+
+
+# Alias for backwards compatibility
+NLPEngine = OptimizedNLPEngine

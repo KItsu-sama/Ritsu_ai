@@ -1,7 +1,12 @@
 from __future__ import annotations
+
+"""old/core/planning.py"""
+
 import logging
 from typing import Any, Dict, List, Optional
 from collections import deque
+import time
+import json
 
 log = logging.getLogger(__name__)
 
@@ -15,8 +20,14 @@ class Planner:
     CREATIVE_KEYWORDS = ["create", "write", "generate", "make", "compose", "invent"] 
     ANALYSIS_KEYWORDS = ["analyze", "compare", "evaluate", "assess", "review"] 
     URGENT_KEYWORDS = ["urgent", "immediately", "asap", "critical", "now"]
-
-    
+    LANGUAGE_KEYWORDS = ["language", "translate", "vietnamese", "english", "japanese"]
+    META_KEYWORDS = {
+    "translate": "translation_request",
+    "language": "translation_request",
+    "vietnamese": "translation_request",
+    "clear memory": "memory_reset",
+    "speak": "voice_output"
+}
 
     def __init__(self, config: Optional[Dict[str, Any]] = None) -> None:
         self.config = config or {}
@@ -52,7 +63,9 @@ class Planner:
         Returns:
             Plan dictionary with actions, strategy, priority, etc. May include simulation_result or policy_violation.
         """
+        log.debug("Planner.decide: received event", extra={"event_id": event.get("id", "unknown"), "content_preview": (event.get("content", "")[:120])})
         try:
+            log.debug("Planner.decide called", extra={"event_preview": (event.get('content','')[:80]), "event_id": event.get('id','unknown')})
             # Analyze once, then merge telemetry immediately so routing/strategy can consider it
             analysis = self._analyze_event(event)
             if system_status:
@@ -87,12 +100,12 @@ class Planner:
                     "event_id": event.get("id", "unknown"),
                     "strategy": strategy,
                     "expert": expert,
-                    "priority": plan["priority"],
+                    "priority": plan.get("priority", None),
                     "actions_count": len(plan.get("actions", [])),
-                    "simulation": "enabled" if self.simulator_enabled else "disabled",  # Tie to A's feature
-                    },
-                )
-            
+                    "simulation": "enabled" if self.simulator_enabled else "disabled",
+                },
+            )
+
             # analysis already computed and merged with system_status above
             return plan
 
@@ -107,6 +120,11 @@ class Planner:
         content = event.get("content", "")
         lower = content.lower() if content else ""  # B's defensiveness: Handle empty
         word_count = len(content.split()) if content else 0
+
+        if any(k in lower for k in self.LANGUAGE_KEYWORDS):
+            analysis["requires_creativity"] = False  # disable creative mode
+            # optionally mark it as direct response
+
         analysis = {  #Initialize to safe defaults
             "type": event.get("type", "unknown"),
             "content": content,
@@ -134,6 +152,20 @@ class Planner:
     # 🎯 Strategy Selection + Routing
     # =====================================================
     def _choose_strategy(self, analysis: Dict[str, Any]) -> str:
+        content = analysis["content"].lower()
+
+        # 1️⃣ Handle meta-intents first
+        for key, meta_type in self.META_KEYWORDS.items():
+            if key in content:
+                return "meta_command"
+
+        # 2️⃣ Use classifier if available
+        if hasattr(self, "intent_classifier"):
+            intent = self.intent_classifier.predict(content)
+            if intent:
+                return self._map_intent_to_strategy(intent)
+
+        # 3️⃣ Fallback to current heuristics
         if analysis["requires_tools"]:
             return "tool_execution"
         if analysis["requires_creativity"]:
@@ -216,16 +248,81 @@ class Planner:
     # =====================================================
     # Plan Builders
     # =====================================================
-    def _generate_plan(self, strategy, event, analysis, expert):
-        # Use registry instead of getattr
-        if strategy not in self.strategies:
-            raise ValueError(f"Unknown strategy: {strategy}")  # Defensive, like B's simplicity
-        base = self.strategies[strategy](event, analysis)
-        base["expert"] = expert  # Keep A's routing
-        base["event_id"] = event.get("id", "unknown")  # From B: Add for logging/tracking
-        base["priority"] = self._calculate_priority(analysis)
-        base["estimated_duration"] = self._estimate_duration(base)
-        return base
+    def _generate_plan(self, strategy: str, event: Dict[str, Any], analysis: Dict[str, Any], expert: str) -> Optional[Dict[str, Any]]:
+        """
+        Generate an execution plan from the given strategy, event, analysis, and expert role.
+        Handles validation, fallback, and debug tracing.
+        """
+        DEBUG = True
+        SAFE_MODE = True
+
+        try:
+            # 1️⃣ Validate strategy
+            if strategy not in self.strategies:
+                log.warning(f"[Planner] Unknown strategy: {strategy}")
+                if SAFE_MODE:
+                    return {
+                        "type": "noop",
+                        "note": f"Unknown strategy '{strategy}' — auto fallback",
+                        "actions": [{"type": "noop", "note": "invalid strategy"}],
+                    }
+                raise ValueError(f"Unknown strategy: {strategy}")
+
+            # 2️⃣ Execute strategy
+            base = self.strategies[strategy](event, analysis)
+            if DEBUG:
+                log.debug(f"[Planner] Raw base plan for {strategy}: {json.dumps(base, indent=2, ensure_ascii=False)}")
+
+            # 3️⃣ Add metadata
+            base["expert"] = expert
+            base["event_id"] = event.get("id", "unknown")
+            base["priority"] = self._calculate_priority(analysis)
+            base["estimated_duration"] = self._estimate_duration(base)
+
+            # 4️⃣ Ensure valid actions
+            if not base.get("actions"):
+                log.warning(f"[Planner] Strategy '{strategy}' returned no actions.")
+                if SAFE_MODE:
+                    base["actions"] = [{"type": "noop", "note": "auto recovery — no actions"}]
+                    base["note"] = "Recovered missing actions"
+
+            return base
+
+        except Exception as e:
+            log.exception(f"[Planner] Exception in _generate_plan: {e}")
+            if SAFE_MODE:
+                return {
+                    "type": "noop",
+                    "note": f"Planner failed due to exception: {e}",
+                    "actions": [{"type": "noop", "note": "planner exception"}],
+                }
+            return None
+
+
+    def _plan_meta_command(self, event, analysis):
+        content = analysis["content"].lower()
+
+        if "vietnamese" in content or "translate" in content:
+            return {
+                "type": "meta_command",
+                "actions": [
+                    {
+                        "type": "ai_response",
+                        "target": "ai_assistant",
+                        "parameters": {
+                            "input_text": "Please respond in Vietnamese from now on.",
+                            "mode": "direct"
+                        }
+                    },
+                    {
+                        "type": "output",
+                        "target": "output_manager",
+                        "parameters": {"destination": analysis["source"], "format": "text"}
+                    }
+                ]
+            }
+        return self._plan_direct_response(event, analysis)
+
 
     def _plan_direct_response(self, event: Dict[str, Any], analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Plan a direct conversational response."""

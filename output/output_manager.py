@@ -12,9 +12,20 @@ OutputManager — central output handler
 
 import asyncio
 import logging
+import time
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
+
+# Color handling for console output (use colorama on Windows when available)
+try:
+    import colorama
+    colorama.init()
+    _GREEN = colorama.Fore.GREEN
+    _RESET = colorama.Style.RESET_ALL
+except Exception:
+    _GREEN = "\x1b[32m"
+    _RESET = "\x1b[0m"
 
 
 class OutputManager:
@@ -40,23 +51,30 @@ class OutputManager:
         self.enable_avatar = self.config.get("enable_avatar", False) and avatar is not None
         self.enable_stream = self.config.get("enable_stream", False) and stream is not None
         
-        # Output queue for async processing
-        self.output_queue: "asyncio.Queue[Dict[str, Any]]" = asyncio.Queue()
+        # Prefix for console outputs (e.g., "Ritsu: ")
+        self.console_prefix = self.config.get("console_prefix", "Ritsu: ")
+        self.error_prefix = self.config.get("error_prefix", "[ERROR] ")
+
+        # Output queue for async processing (bounded to avoid unbounded memory growth)
+        max_q = int(self.config.get("queue_maxsize", 50))
+        self.output_queue = asyncio.Queue(maxsize=max_q)
         self.processing_task: Optional[asyncio.Task] = None
-        
+
         # Statistics
         self.stats = {
             "messages_sent": 0,
             "errors": 0,
             "by_destination": {},
             "by_format": {},
+            "start_time": time.time(),
         }
-        
+
         log.info("Output manager initialized", extra={
             "console_enabled": self.enable_console,
             "tts_enabled": self.enable_tts,
             "avatar_enabled": self.enable_avatar,
             "stream_enabled": self.enable_stream,
+            "prefix": self.console_prefix,
         })
     
     async def start(self) -> None:
@@ -87,31 +105,55 @@ class OutputManager:
                 - destination: Target destination (cli, stream, etc.)
                 - format: Output format (text, audio, visual)
                 - metadata: Additional metadata
+                - parameters: Optional params (e.g., from Planner actions)
         """
+        # Ensure consistent structure
+        data = output_data
+        if isinstance(data, str):
+            data = {"status": "success", "content": data}
+        elif isinstance(data, dict) and "content" not in data:
+            data["content"] = data.get("message", "")
+        
+        # Handle byte-decoding from parameters (e.g., Planner actions or external sources)
+        parameters = data.get("parameters", {})
+        message = parameters.get("message", data.get("content", ""))
+        if isinstance(message, bytes):
+            message = message.decode("utf-8", errors="replace")
+        if message:
+            data["content"] = message  # Override/set content if valid
+        
         try:
-            # Validate output data
-            if not self._validate_output_data(output_data):
-                log.warning("Invalid output data", extra={"data": output_data})
+            if not self._validate_output_data(data):
+                log.warning("Invalid output data", extra={"data": data})
                 return
             
             # Add timestamp and ID
-            output_data["timestamp"] = asyncio.get_event_loop().time()
-            output_data["output_id"] = f"out_{int(output_data['timestamp'] * 1000)}"
+            data["timestamp"] = time.time()
+            data["output_id"] = f"out_{int(data['timestamp'] * 1000)}"
             
-            # Queue for processing
-            await self.output_queue.put(output_data)
+            # Queue for processing - use a short timeout to avoid blocking forever
+            try:
+                await asyncio.wait_for(self.output_queue.put(data), timeout=1.0)
+            except asyncio.TimeoutError:
+                # Queue is full or putting blocked; drop the message to avoid memory growth
+                log.warning("Output queue full; dropping message", extra={
+                    "destination": data.get("destination"),
+                    "preview": str(data.get("content", ""))[:200]
+                })
+                self.stats["errors"] += 1
+                return
             
             log.debug("Output queued", extra={
-                "destination": output_data.get("destination"),
-                "format": output_data.get("format"),
-                "content_preview": str(output_data.get("content", ""))[:50]
+                "destination": data.get("destination"),
+                "format": data.get("format"),
+                "content_preview": str(data.get("content", ""))[:50]
             })
             
         except Exception as e:
             log.error("Failed to emit output", extra={
-                "output_data": output_data,
+                "output_data": data,
                 "error": str(e)
-            })
+            }, exc_info=True)
             self.stats["errors"] += 1
     
     def _validate_output_data(self, output_data: Dict[str, Any]) -> bool:
@@ -146,7 +188,7 @@ class OutputManager:
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    log.error("Error processing output", extra={"error": str(e)})
+                    log.error("Error processing output", extra={"error": str(e)}, exc_info=True)
                     self.stats["errors"] += 1
                     
         except asyncio.CancelledError:
@@ -160,6 +202,7 @@ class OutputManager:
             format_type = output_data.get("format", "text")
             content = output_data.get("content")
             is_error = output_data.get("is_error", False)
+            metadata = output_data.get("metadata", {})
             
             # Update statistics
             self.stats["messages_sent"] += 1
@@ -167,7 +210,7 @@ class OutputManager:
             self.stats["by_format"][format_type] = self.stats["by_format"].get(format_type, 0) + 1
             
             # Route to appropriate output channels
-            await self._route_output(destination, format_type, content, is_error, output_data)
+            await self._route_output(destination, format_type, content, is_error, metadata)
             
             log.debug("Output processed", extra={
                 "destination": destination,
@@ -179,7 +222,7 @@ class OutputManager:
             log.error("Failed to process output", extra={
                 "output_data": output_data,
                 "error": str(e)
-            })
+            }, exc_info=True)
             self.stats["errors"] += 1
     
     async def _route_output(
@@ -199,11 +242,11 @@ class OutputManager:
         if destination == "stream" and self.enable_stream:
             await self._output_to_stream(content, format_type, metadata)
         
-        # Handle TTS for audio format
+        # Handle TTS for audio format or text with TTS enabled
         if format_type == "audio" or (format_type == "text" and self.enable_tts):
             await self._output_to_tts(content, metadata)
         
-        # Handle avatar animations
+        # Handle avatar animations (non-errors only)
         if self.enable_avatar and not is_error:
             await self._output_to_avatar(content, format_type, metadata)
     
@@ -218,23 +261,32 @@ class OutputManager:
     async def _output_to_console(self, content: Any, is_error: bool = False) -> None:
         """Output to console/terminal."""
         try:
-            # Convert content to string
-            if isinstance(content, str):
-                text = content
-            else:
-                text = str(content)
+            # Ensure content is a string (decode if bytes, fallback to str)
+            if isinstance(content, bytes):
+                content = content.decode("utf-8", errors="replace")
+            text = str(content) if not isinstance(content, str) else content
             
-            # Add prefix for errors
+            # Add prefix for errors or normal responses
             if is_error:
-                text = f"[ERROR] {text}"
+                text = f"{self.error_prefix}{text}"
             else:
-                text = f"Ritsu: {text}"
+                # Make the 'Ritsu:' prefix green for console readability
+                text = f"{_GREEN}{self.console_prefix}{_RESET}{text}"
             
-            # Print to console (using print for simplicity)
+            # Print to console
             print(text)
+
+            # Reset turn flag for input manager (assuming global or imported)
+            try:
+                from input.input_manager import Ritsu_turn as _
+                import input.input_manager as im
+                im.Ritsu_turn = False
+                log.debug("Reset Ritsu_turn flag")
+            except Exception as e:
+                log.debug(f"Could not reset turn flag: {e}")
             
         except Exception as e:
-            log.error("Console output failed", extra={"error": str(e)})
+            log.error("Console output failed", extra={"error": str(e)}, exc_info=True)
     
     async def _output_to_tts(self, content: Any, metadata: Dict[str, Any]) -> None:
         """Output to text-to-speech."""
@@ -242,22 +294,19 @@ class OutputManager:
             return
         
         try:
-            # Convert content to speech-friendly text
-            if isinstance(content, str):
-                text = content
-            else:
-                text = str(content)
+            # Ensure content is a string (decode if bytes)
+            if isinstance(content, bytes):
+                content = content.decode("utf-8", errors="replace")
+            text = str(content) if not isinstance(content, str) else content
             
-            # Remove special characters that might affect TTS
-            text = text.replace("[ERROR]", "Error:")
-            text = text.replace("Ritsu:", "")
-            text = text.strip()
+            # Clean for TTS (remove prefixes, strip)
+            text = text.replace(self.error_prefix, "Error: ").replace(self.console_prefix, "").strip()
             
             if text:
                 await self.tts.speak(text, metadata)
             
         except Exception as e:
-            log.error("TTS output failed", extra={"error": str(e)})
+            log.error("TTS output failed", extra={"error": str(e)}, exc_info=True)
     
     async def _output_to_avatar(self, content: Any, format_type: str, metadata: Dict[str, Any]) -> None:
         """Output to avatar animation system."""
@@ -268,19 +317,22 @@ class OutputManager:
             # Determine appropriate animation/expression
             animation_type = "speaking"
             
-            if isinstance(content, str):
-                content_lower = content.lower()
-                if any(word in content_lower for word in ["error", "sorry", "apologize"]):
-                    animation_type = "confused"
-                elif any(word in content_lower for word in ["happy", "great", "excellent"]):
-                    animation_type = "happy"
-                elif "?" in content:
-                    animation_type = "curious"
+            # Ensure content is string for analysis
+            if isinstance(content, bytes):
+                content = content.decode("utf-8", errors="replace")
+            content_lower = str(content).lower()
+            
+            if any(word in content_lower for word in ["error", "sorry", "apologize"]):
+                animation_type = "confused"
+            elif any(word in content_lower for word in ["happy", "great", "excellent"]):
+                animation_type = "happy"
+            elif "?" in content_lower:
+                animation_type = "curious"
             
             await self.avatar.animate(animation_type, metadata)
             
         except Exception as e:
-            log.error("Avatar output failed", extra={"error": str(e)})
+            log.error("Avatar output failed", extra={"error": str(e)}, exc_info=True)
     
     async def _output_to_stream(self, content: Any, format_type: str, metadata: Dict[str, Any]) -> None:
         """Output to streaming overlay/interface."""
@@ -288,6 +340,10 @@ class OutputManager:
             return
         
         try:
+            # Ensure content is serializable (decode if bytes)
+            if isinstance(content, bytes):
+                content = content.decode("utf-8", errors="replace")
+            
             stream_data = {
                 "type": "message",
                 "content": content,
@@ -299,13 +355,19 @@ class OutputManager:
             await self.stream.send(stream_data)
             
         except Exception as e:
-            log.error("Stream output failed", extra={"error": str(e)})
+            log.error("Stream output failed", extra={"error": str(e)}, exc_info=True)
     
     def get_stats(self) -> Dict[str, Any]:
         """Get output statistics."""
+        uptime = time.time() - self.stats["start_time"]
+        avg_rate = self.stats["messages_sent"] / max(uptime, 1) if uptime > 0 else 0
+        
         return {
             "messages_sent": self.stats["messages_sent"],
             "errors": self.stats["errors"],
+            "error_rate": self.stats["errors"] / max(self.stats["messages_sent"], 1),
+            "uptime_seconds": uptime,
+            "avg_messages_per_second": avg_rate,
             "by_destination": self.stats["by_destination"].copy(),
             "by_format": self.stats["by_format"].copy(),
             "queue_size": self.output_queue.qsize(),
@@ -324,21 +386,42 @@ class OutputManager:
             "errors": 0,
             "by_destination": {},
             "by_format": {},
+            "start_time": time.time(),
         }
         log.info("Output statistics cleared")
     
     async def close(self) -> None:
         """Close output manager and cleanup resources."""
+        # Drain remaining queue
+        while not self.output_queue.empty():
+            try:
+                item = await asyncio.wait_for(self.output_queue.get(), timeout=1.0)
+                await self._process_output(item)
+                self.output_queue.task_done()
+            except asyncio.TimeoutError:
+                break
+            except Exception as e:
+                log.warning("Error draining queue", extra={"error": str(e)})
+        
         await self.stop()
         
         # Close component connections
         if self.tts and hasattr(self.tts, "close"):
-            await self.tts.close()
+            try:
+                await self.tts.close()
+            except Exception as e:
+                log.error("TTS close failed", extra={"error": str(e)})
         
         if self.avatar and hasattr(self.avatar, "close"):
-            await self.avatar.close()
+            try:
+                await self.avatar.close()
+            except Exception as e:
+                log.error("Avatar close failed", extra={"error": str(e)})
         
         if self.stream and hasattr(self.stream, "close"):
-            await self.stream.close()
+            try:
+                await self.stream.close()
+            except Exception as e:
+                log.error("Stream close failed", extra={"error": str(e)})
         
         log.info("Output manager closed")

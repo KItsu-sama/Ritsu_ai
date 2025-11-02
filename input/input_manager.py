@@ -13,10 +13,32 @@ InputManager — decides: mic, chat, file
 import asyncio
 import logging
 from typing import Any, Dict, List, Optional
+import subprocess
+import re
 
 log = logging.getLogger(__name__)
 
+# Initialize logging flags
+_root_logging_silenced = False
+
 Ritsu_turn = False
+
+GREEN = "\033[32m"
+RED = "\033[31m"
+YELLOW = "\033[33m"
+RESET = "\033[0m"
+shell_color = YELLOW
+
+# Color handling for prompt
+try:
+    import colorama
+    colorama.init()
+    YELLOW = colorama.Fore.YELLOW
+    RESET = colorama.Style.RESET_ALL
+except Exception:
+    # Fallback ANSI
+    YELLOW = "\x1b[33m"
+    RESET = "\x1b[0m"
 
 class InputManager:
     """Manages input from multiple sources and emits events."""
@@ -27,6 +49,7 @@ class InputManager:
         mic=None,
         chat=None,
         command_parser=None,
+        command_classifier=None,
     ):
         self.config = config or {}
         
@@ -34,17 +57,21 @@ class InputManager:
         self.mic = mic
         self.chat = chat
         self.command_parser = command_parser
+        # Optional fallback classifier (rule-based/ML)
+        self.command_classifier = command_classifier
         
         # Input sources configuration
         self.enable_cli = True  # Always enabled
-        self.enable_mic = self.config.get("enable_mic", False) and mic is not None
-        self.enable_chat = self.config.get("enable_chat", False) and chat is not None
-        self.enable_ui = self.config.get("enable_ui", False)
-        self.enable_api = self.config.get("enable_api", False)
+        self.enable_mic = False  # Disable mic by default
+        self.enable_chat = False  # Disable chat by default
+        self.enable_ui = False  # Disable UI by default
+        self.enable_api = False  # Disable API by default
         
         # State tracking
         self.active_sources = []
         self._setup_active_sources()
+
+        global _root_logging_silenced
     
     def _setup_active_sources(self) -> None:
         """Setup list of active input sources."""
@@ -69,6 +96,22 @@ class InputManager:
             "sources": [name for name, _ in self.active_sources]
         })
     
+    async def get_input(self) -> str:
+        """Get input from the user asynchronously."""
+        try:
+            # Use asyncio.to_thread for blocking input operations
+            result = await asyncio.to_thread(input, f"{shell_color}$ {RESET}")
+            return result.strip()
+        except EOFError:
+            log.debug("EOF received")
+            return ""
+        except KeyboardInterrupt:
+            log.debug("KeyboardInterrupt received")
+            return ""
+        except Exception as e:
+            log.error(f"Error getting input: {e}")
+            return ""
+
     async def run(
         self,
         queue: "asyncio.Queue[Dict[str, Any]]",
@@ -122,11 +165,14 @@ class InputManager:
         shutdown_event: asyncio.Event
     ) -> None:
         """Run a single input source."""
+        log.debug(f"Starting input source: {source_name}")
         try:
             while not shutdown_event.is_set():
                 try:
                     # Get input from source
+                    log.debug(f"Awaiting input from {source_name}")
                     input_data = await handler()
+                    log.debug(f"Received input from {source_name}: {input_data}")
                     
                     if input_data:
                         # Create event
@@ -147,7 +193,11 @@ class InputManager:
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    log.error("Input source error", extra={
+                    if str(e) == "EOF when reading a line":
+                        # Handle EOF gracefully
+                        log.debug(f"EOF received on {source_name}, stopping")
+                        break
+                    log.error(f"Input source error on {source_name}: {e}", extra={
                         "source": source_name,
                         "error": str(e)
                     })
@@ -158,6 +208,48 @@ class InputManager:
             log.debug("Input source cancelled", extra={"source": source_name})
             raise
     
+    async def _handle_cli_input(self) -> Optional[Dict[str, Any]]:
+        """Handle CLI input."""
+        try:
+            user_input = await self.get_input()
+            if not user_input:
+                return None
+                
+            log.debug(f"CLI input received: {user_input}")
+            
+            # Check for wake words
+            wake_pattern = re.compile(r'^(hey\s+ritsu|ritsu)(?:\s|$)', re.IGNORECASE)
+            if wake_pattern.match(user_input):
+                log.debug("Wake word detected")
+                # If command follows wake word, extract it
+                command = user_input[wake_pattern.match(user_input).end():].strip()
+                if not command:
+                    print("Ritsu: listening...")
+                    # Get follow-up input
+                    command = await self.get_input()
+                    if not command:
+                        return None
+                
+                return {
+                    "content": command,
+                    "metadata": {
+                        "source": "cli",
+                        "wake_word": True
+                    }
+                }
+            
+            # Non-wake word input
+            return {
+                "content": user_input,
+                "metadata": {
+                    "source": "cli",
+                    "wake_word": False
+                }
+            }
+        except Exception as e:
+            log.error(f"CLI input error: {e}")
+            return None
+
     async def _create_event(self, source: str, input_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Create a standardized event from input data.
         
@@ -180,6 +272,26 @@ class InputManager:
                     parsed_command = self.command_parser.parse(content)
                 except Exception as e:
                     log.warning("Command parsing failed", extra={"error": str(e)})
+
+            # Fallback: use command_classifier to infer system-like inputs if parser returned nothing
+            if not parsed_command and self.command_classifier:
+                try:
+                    cls_result = self.command_classifier.classify(content)
+                    # If classifier identifies a shell_command or high-confidence system intent, synthesize
+                    if cls_result and cls_result.confidence >= 0.6 and cls_result.category in ("executor", "monitor"):
+                        # Create a minimal CommandResult-like object (simple namespace)
+                        class _Synth:
+                            pass
+                        synth = _Synth()
+                        synth.raw_text = content
+                        synth.type = "system"
+                        synth.command = cls_result.metadata.get("match") or (content.split()[0] if content else "")
+                        synth.args = cls_result.metadata.get("args", []) if isinstance(cls_result.metadata.get("args", []), list) else []
+                        synth.flags = {}
+                        synth.metadata = {"source": source, "confidence": cls_result.confidence}
+                        parsed_command = synth
+                except Exception as e:
+                    log.debug("Command classifier failed", extra={"error": str(e)})
             
             # Create standardized event
             event = {
@@ -209,89 +321,131 @@ class InputManager:
     async def _handle_cli_input(self) -> Optional[Dict[str, Any]]:
         """Handle command line input."""
         global Ritsu_turn
+        global _root_logging_silenced
 
-        if not Ritsu_turn :
+        
+        if _root_logging_silenced:
+            # Run shell command synchronously but without blocking the event loop
+            print(f"{shell_color}Terminal/User>{RESET}", end=" ", flush=True)
+            loop = asyncio.get_event_loop()
             try:
-                # Use asyncio to run input() in a thread pool to avoid blocking
-                loop = asyncio.get_event_loop()
-                user_input = await loop.run_in_executor(None, input, "User> ")
-                
-                if user_input.strip():
-                    return {
-                        "content": user_input.strip(),
-                        "metadata": {"input_method": "keyboard"}
-                    }
-                
-                Ritsu_turn = True
-                
-            except EOFError:
-                # Handle Ctrl+D or EOF
-                return {
-                    "content": "!quit",
-                    "metadata": {"input_method": "keyboard", "eof": True}
-                }
-            except KeyboardInterrupt:
-                # Handle Ctrl+C
-                return {
-                    "content": "!quit",
-                    "metadata": {"input_method": "keyboard", "interrupt": True}
-                }
+                Command = await loop.run_in_executor(None, input)
+                Command = Command.strip()
+            except Exception:
+                return None
+
+            if not Command:
+                return None
+
+            try:
+                # Run the subprocess in a thread to avoid blocking
+                log.debug("CLI: executing shell command", extra={"cmd_preview": Command[:200]})
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run(Command, shell=True, text=True, capture_output=True)
+                )
+
+                if result.returncode == 0:
+                    # Command succeeded
+                    print(f"{GREEN}{result.stdout}{RESET}")
+                    globals()['shell_color'] = GREEN
+                    log.debug("CLI: shell command succeeded", extra={"returncode": result.returncode})
+                else:
+                    # Command ran but failed (non-zero exit)
+                    print(f"{RED}{result.stderr or 'Command failed.'}{RESET}")
+                    globals()['shell_color'] = RED
+                    log.debug("CLI: shell command failed", extra={"returncode": result.returncode})
+
             except Exception as e:
-                log.error("CLI input error", extra={"error": str(e)})
-            
+                # Command couldn’t even run
+                print(f"{RED}Error executing command: {e}{RESET}")
+                globals()['shell_color'] = RED
+                log.exception("CLI: shell execution error")
+
+            # After running a shell command, don't produce an InputManager event
             return None
         else:
-            await asyncio.sleep(1.0)  # Prevent tight loop
-            print("Ritsu> ", end="", flush=True )
-            Ritsu_turn = False
-            return None
-    
+            if not Ritsu_turn:
+                try:
+                    # Use asyncio to run input() in a thread pool to avoid blocking
+                    loop = asyncio.get_event_loop()
+                    prompt = f"{YELLOW}User> {RESET}"
+                    user_input = await loop.run_in_executor(None, input, prompt)
+
+                    if user_input.strip():
+                        Ritsu_turn = True  # Set flag before returning
+                        log.debug("CLI: user input captured", extra={"preview": user_input.strip()[:120]})
+                        return {
+                            "content": user_input.strip(),
+                            "metadata": {"input_method": "keyboard"}
+                        }
+                    
+                except EOFError:
+                    # Handle Ctrl+D or EOF
+                    return {
+                        "content": "!quit",
+                        "metadata": {"input_method": "keyboard", "eof": True}
+                    }
+                except KeyboardInterrupt:
+                    # Handle Ctrl+C
+                    return {
+                        "content": "!quit",
+                        "metadata": {"input_method": "keyboard", "interrupt": True}
+                    }
+                except Exception as e:
+                    log.error("CLI input error", extra={"error": str(e)})
+                
+                return None
+            else:
+                # Wait for turn to be reset (happens after response is generated)
+                await asyncio.sleep(0.5)  # Prevent tight loop
+                return None
+        
     async def _handle_mic_input(self) -> Optional[Dict[str, Any]]:
         """Handle microphone input via STT."""
         if not self.mic:
             return None
-        
+            
         try:
             # This would interface with the mic listener component
             audio_data = await self.mic.listen()
-            
+                
             if audio_data:
                 return {
-                    "content": audio_data.get("transcription", ""),
-                    "metadata": {
-                        "input_method": "microphone",
-                        "confidence": audio_data.get("confidence", 0.0),
-                        "duration": audio_data.get("duration", 0.0)
+                        "content": audio_data.get("transcription", ""),
+                        "metadata": {
+                            "input_method": "microphone",
+                            "confidence": audio_data.get("confidence", 0.0),
+                            "duration": audio_data.get("duration", 0.0)
+                        }
                     }
-                }
         except Exception as e:
             log.error("Microphone input error", extra={"error": str(e)})
-        
+            
         return None
-    
+        
     async def _handle_chat_input(self) -> Optional[Dict[str, Any]]:
         """Handle chat input from external platforms."""
         if not self.chat:
             return None
-        
-        try:
-            # This would interface with chat listener components
-            chat_message = await self.chat.get_message()
             
+        try:
+                # This would interface with chat listener components
+            chat_message = await self.chat.get_message()
+                
             if chat_message:
                 return {
-                    "content": chat_message.get("content", ""),
-                    "metadata": {
-                        "input_method": "chat",
-                        "platform": chat_message.get("platform", "unknown"),
-                        "user_id": chat_message.get("user_id", "unknown"),
-                        "channel": chat_message.get("channel", "unknown")
+                        "content": chat_message.get("content", ""),
+                        "metadata": {
+                            "input_method": "chat",
+                            "platform": chat_message.get("platform", "unknown"),
+                            "user_id": chat_message.get("user_id", "unknown"),
+                            "channel": chat_message.get("channel", "unknown")
+                        }
                     }
-                }
         except Exception as e:
             log.error("Chat input error", extra={"error": str(e)})
-        
-        return None
+            return None
     
     async def _handle_ui_input(self) -> Optional[Dict[str, Any]]:
         """Handle UI input from C# interface."""

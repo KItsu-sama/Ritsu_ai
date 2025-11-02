@@ -14,6 +14,7 @@ import asyncio
 import logging
 import time
 from typing import Any, Dict, List, Optional
+from config.config import _model_
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class ActionExecutor:
     
     async def _handle_switch_model(self, step: Dict[str, Any], context: Dict[str, Any]):
         """Switch to a fallback model"""
-        model = step.get("parameters", {}).get("model", "gemma:2b")
+        model = step.get("parameters", {}).get("model", _model_)
         
         # Access AI system through executor's components
         if hasattr(self.executor, 'components') and 'ai_system' in self.executor.components:
@@ -182,7 +183,11 @@ class Executor:
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         self.config = config or {}
         self.max_concurrent_actions = self.config.get("max_concurrent_actions", 5)
-        
+        self._plan_timeout = self.config.get("plan_timeout_seconds", 60)  # <= change as needed
+
+        # semaphore to limit parallelism at action-level
+        self._action_semaphore = asyncio.Semaphore(self.max_concurrent_actions)
+
         # Component references (will be injected by main.py)
         self.components: Dict[str, Any] = {}
         
@@ -216,51 +221,72 @@ class Executor:
             plan: The plan to execute
             context: Optional execution context with system metrics, security level, etc.
         """
+        log.debug("Executor.execute: start", extra={"plan_type": plan.get("type"), "actions_count": len(plan.get("actions", []))})
         result = ExecutionResult()
         result.mark_started()
-        
+
         try:
             actions = plan.get("actions", [])
             if not actions:
                 result.mark_completed({"message": "No actions to execute"})
                 return result
-            
+
             log.debug("Executing plan", extra={
                 "plan_type": plan.get("type"),
                 "actions_count": len(actions),
                 "priority": plan.get("priority"),
                 "has_context": context is not None
             })
-            
+
             # Initialize execution context
             execution_context = context or {}
-            
+
             # Execute actions sequentially (parallelism can be added later)
             action_results = {}
-            
-            for i, action in enumerate(actions):
-                action_result = await self._execute_action(action, execution_context)
-                action_results[f"action_{i}"] = action_result
-                
-                # Update context with results for next actions
-                if action_result.get("status") == "completed":
-                    execution_context.update(action_result.get("data", {}))
-                else:
-                    error_msg = f"Action {i} failed: {action_result.get('error', 'Unknown error')}"
-                    result.errors.append(error_msg)
-                    log.warning("Action failed during execution", extra={
-                        "action_index": i,
-                        "action_type": action.get("type"),
-                        "error": action_result.get("error")
-                    })
-                if plan.get("allow_parallel", False):
-                    tasks = [self._execute_action(a, execution_context) for a in actions]
-                    results = await asyncio.gather(*tasks)
-                else:
-                    results = []
-                    for a in actions:
-                        results.append(await self._execute_action(a, execution_context))
-            
+
+            # Execute actions: either run them in parallel once, or sequentially once
+            if plan.get("allow_parallel", False):
+                # Run all actions concurrently and collect results
+                tasks = [self._execute_action(a, execution_context) for a in actions]
+                parallel_results = await asyncio.gather(*tasks)
+                for i, action_result in enumerate(parallel_results):
+                    action_results[f"action_{i}"] = action_result
+                    # update execution context for downstream consumers
+                    if action_result.get("status") == "completed":
+                        action_data = action_result.get("data", {})
+                        execution_context.update(action_data)
+                        if actions[i].get("type") == "ai_response" and "response" in action_data:
+                            execution_context["response"] = action_data["response"]
+                    else:
+                        error_msg = f"Action {i} failed: {action_result.get('error', 'Unknown error')}"
+                        result.errors.append(error_msg)
+                        log.warning("Action failed during execution", extra={
+                            "action_index": i,
+                            "action_type": actions[i].get("type"),
+                            "error": action_result.get("error")
+                        })
+            else:
+                # Sequential execution (default)
+                for i, action in enumerate(actions):
+                    action_result = await self._execute_action(action, execution_context)
+                    action_results[f"action_{i}"] = action_result
+
+                    # Update context with results for next actions
+                    if action_result.get("status") == "completed":
+                        action_data = action_result.get("data", {})
+                        execution_context.update(action_data)
+                        # Special handling for AI responses - make them available for output actions
+                        if action.get("type") == "ai_response" and "response" in action_data:
+                            execution_context["response"] = action_data["response"]
+                    else:
+                        error_msg = f"Action {i} failed: {action_result.get('error', 'Unknown error')}"
+                        result.errors.append(error_msg)
+                        log.warning("Action failed during execution", extra={
+                            "action_index": i,
+                            "action_type": action.get("type"),
+                            "error": action_result.get("error")
+                        })
+
             # Save to memory if available
             if "memory_manager" in self.components:
                 try:
@@ -280,14 +306,24 @@ class Executor:
                 "action_results": action_results,
                 "context": execution_context,
             }
-            
+
             result.mark_completed(final_results)
-            
+
         except Exception as e:
-            error_msg = f"Execution failed: {str(e)}"
+            import traceback  # Import traceback for formatting, as in the second block
+
+            # Format the traceback and build a detailed error message, as in the second block
+            tb = traceback.format_exc()
+            error_msg = f"Execution failed: {e.__class__.__name__}: {e}\n{tb}"
+
+            # Mark the result as failed with the detailed error message, as in both blocks
             result.mark_failed(error_msg)
+
+            # Log the exception with additional context, as in the first block
+            # log.exception will automatically include the traceback of the current exception
             log.exception("Plan execution failed", extra={"plan": plan})
-        
+
+        # Always return the result
         return result
     
     async def _execute_action(self, action: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -302,24 +338,29 @@ class Executor:
             if action_type in ("shell_command", "driver_update", "hardware_control"):
                 return {"status": "blocked", "error": "Action disabled in safe_mode"}
 
-        
+
+        log.debug("Executor._execute_action: executing", extra={"action_type": action.get("type")})
         try:
             if action_type in self.action_handlers:
                 handler = self.action_handlers[action_type]
                 result = await handler(action, context)
-                
+
+                # Ensure result is always a dict
+                if result is None:
+                    result = {"status": "completed", "data": {}}
+
                 log.debug("Action executed", extra={
                     "action_type": action_type,
                     "status": result.get("status", "unknown")
                 })
-                
+
                 return result
             else:
                 return {
                     "status": "failed",
                     "error": f"Unknown action type: {action_type}"
                 }
-                
+
         except Exception as e:
             return {
                 "status": "failed",
@@ -417,6 +458,55 @@ class Executor:
             }
         except Exception as e:
             return {"status": "failed", "error": str(e)}
+        
+    async def _execute_reload_all(self, action: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
+        """Reload all core modules dynamically (hot reload), excluding core.executor."""
+        import importlib
+        import sys
+        from core.reloader import reload_modules_safe
+        # Build list of modules as in the second version, excluding "core.executor"
+        module_names = [
+            "core.event_manager",
+            "core.planning",
+            "core.troubleshooter",
+            "core.self_improvement",
+            "core.tools",
+            "core.code_analyzer",
+            "core.code_generator",
+            "core.codedb",
+            "core.shell_executor",
+            "core.command_classifier",
+            "core.Ritsu_self",
+        ]
+        
+        # Run the safe reload in a separate thread to avoid blocking the event loop
+        loop = asyncio.get_event_loop()
+        res = await loop.run_in_executor(None, reload_modules_safe, module_names, 30)
+        
+        # Assuming res is a dictionary of reload results (e.g., {module_name: status})
+        reload_status = res  # Directly use the result from reload_modules_safe
+        
+        # Log the results based on the response from reload_modules_safe
+        for module_name, status in reload_status.items():
+            if status == "reloaded":  # Assuming status is a string like "reloaded" or "failed: error"
+                log.info(f"Reloaded {module_name}")
+            else:
+                log.warning(f"Failed to reload {module_name}: {status}")
+        
+        # Perform cleanup of stale modules as in the first version
+        for mod_name in list(sys.modules.keys()):
+            if mod_name.startswith("core.") and mod_name not in module_names:
+                del sys.modules[mod_name]
+                log.info(f"Removed stale module: {mod_name}")
+        
+        return {
+            "status": "completed",
+            "data": {
+                "reloaded_modules": reload_status,  # From reload_modules_safe
+                "timestamp": time.time(),
+            },
+        }
+
     
     async def _execute_tool_call(self, action: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
         """Execute tool call."""

@@ -1,6 +1,7 @@
 # config.py
 
 version = "1.0.0"
+_model_ = "gemma:2b" # gemma:2b , mistral:7b , phi:3.8b-mini
 
 # Application settings
 APP_NAME = "Ritsu"
