@@ -13,7 +13,7 @@
             "justMyCode": false,              // Lets you step into library code
             "env": { "PYTHONPATH": "${workspaceFolder}" }, // Ensures imports from your project root
             "cwd": "${workspaceFolder}",       // Runs from the project root directory
-            "python": "D:\\Coding ooo\\python.exe",
+            "python": "${command:python.interpreterPath}",
         }
     ]
 }

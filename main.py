@@ -194,7 +194,7 @@ from core.planning import Planner
 from core.planner_manager import PlannerManager
 from core.planner_manager import PlannerType
 
-
+# core components
 EventManager = import_optional("core.event_manager:EventManager")
 Planner = import_optional("core.planning:Planner")
 Executor = import_optional("core.executor")
@@ -206,16 +206,19 @@ CodeAnalyzer = import_optional("core.code_analyzer:CodeAnalyzer")
 CodeGenerator = import_optional("core.code_generator:CodeGenerator")
 CodeDB = import_optional("core.codedb:CodeDB")
 
+# input components
 InputManager = import_optional("input.input_manager:InputManager")
-STT = import_optional("input.stt")
+STT = import_optional("input.stt:STT")
 ChatListener = import_optional("input.chat_listener:ChatListener")
 CommandParser = import_optional("input.command_parser:CommandParser")
 
+# output components
 OutputManager = import_optional("output.output_manager:OutputManager")
-TTS = import_optional("output.tts")
+TTS = import_optional("output.tts:TTS")
 AvatarAnimator = import_optional("output.avatar_animator:AvatarAnimator")
 StreamAdapter = import_optional("output.stream_adapter:StreamAdapter")
 
+# AI/LLM components
 PromptTemplates = import_optional("llm.prompt_templates:character_context")
 
 NLPEngine = import_optional("ai.nlp_engine:NLPEngine")
@@ -223,6 +226,7 @@ KnowledgeBase = import_optional("ai.knowledge_base:KnowledgeBase")
 MemoryManager = import_optional("ai.memory_manager:MemoryManager")
 AIAssistant = import_optional("ai.ai_assistant:AIAssistant")
 
+# integrations
 RustEditor = import_optional("system.bindings_rust:RustEditor")
 UIClient = import_optional("system.bindings_ui:UIClient")
 
@@ -398,77 +402,82 @@ except Exception:
 
 
 # --------------------------------- Bootstrap ---------------------------------
+#=====UNIVERSAL SAFE INITIALIZER=====
+log = get_logger(__name__)
+
 def safe_init(cls, config=None, *args, **kwargs):
-    """Initialize component safely, return None if fails"""
+    """Safely initialize a component with multiple constructor fallbacks."""
     logger = get_logger(__name__)
 
-    # 1. Handle invalid or missing class
     if cls is None or not callable(cls):
         logger.error(f"safe_init received invalid cls: {cls!r}")
         return None
 
     try:
         if not inspect.isclass(cls):
-            log.error(f"safe_init received invalid cls: {repr(cls)}")
+            logger.error(f"safe_init received non-class target: {repr(cls)}")
             return None
-        # 2. Try with config keyword
-        if config is not None:
+
+        # Try construction in the most likely useful order
+        attempts = [
+            lambda: cls(config=config, *args, **kwargs),
+            lambda: cls(*args, **kwargs),
+            lambda: cls(config, *args, **kwargs),
+            lambda: cls()
+        ]
+
+        for attempt in attempts:
             try:
-                return cls(config=config, *args, **kwargs)
+                return attempt()
             except TypeError:
-                pass
-
-        # 3. Try without config
-        try:
-            return cls(*args, **kwargs)
-        except TypeError:
-            pass
-
-        # 4. Try with config as positional
-        if config is not None:
-            try:
-                return cls(config, *args, **kwargs)
-            except TypeError:
-                pass
-
-        # 5. Last resort: call with no arguments
+                continue
+        # If all failed silently, fallback to no-arg init
         return cls()
-
     except Exception as e:
-        name = getattr(cls, "__name__", str(cls))  # handles strings safely
+        name = getattr(cls, "__name__", str(cls))
         logger.warning(f"Failed to initialize {name}: {e}")
+        logger.debug("".join(traceback.format_exc()))
         return None
 
-    
+
+# =====ENHANCED COMPONENT LOADER=====
+
+
 def add_enhanced_components(ctx: "AppContext", config: dict) -> None:
     """Attach optional/enhanced components to the context."""
 
-    # Helper to safely build using the imported class (if available)
-    def safe_build(cls, cfg_key: str):
-        if cls:
-            try:
-                cfg = config.get(cfg_key, {})
-                return safe_init(cls, config=cfg)
-            except Exception:
-                return safe_init(cls)
-        return None
+    def safe_build(cls, key: str):
+        if not cls:
+            return None
+        try:
+            cfg = config.get(key, {})
+            return safe_init(cls, config=cfg)
+        except Exception:
+            return safe_init(cls)
 
-    ctx.performance_monitor = safe_build(PerformanceMonitor, "performance")
-    ctx.security_manager = safe_build(SecurityManager, "security")
-    ctx.auto_updater = safe_build(AutoUpdater, "auto_update")
-    ctx.plugin_manager = safe_build(PluginManager, "plugins")
-    ctx.task_scheduler = safe_build(TaskScheduler, "scheduler")
+    enhanced_map = {
+        "performance_monitor": (PerformanceMonitor, "performance"),
+        "security_manager": (SecurityManager, "security"),
+        "auto_updater": (AutoUpdater, "auto_update"),
+        "plugin_manager": (PluginManager, "plugins"),
+        "task_scheduler": (TaskScheduler, "scheduler"),
+        "hardware_monitor": (HardwareMonitor, "hardware"),
+        "system_analyzer": (SystemAnalyzer, "system_analyzer"),
+        "network_monitor": (NetworkMonitor, "network"),
+        "code_reviewer": (CodeReviewer, "code_review"),
+        "test_generator": (TestGenerator, "test_gen"),
+        "documentation_generator": (DocumentationGenerator, "docs"),
+    }
 
-    ctx.hardware_monitor = safe_build(HardwareMonitor, "hardware")
-    ctx.system_analyzer = safe_build(SystemAnalyzer, "system_analyzer")
-    ctx.network_monitor = safe_build(NetworkMonitor, "network")
+    for attr, (cls, key) in enhanced_map.items():
+        setattr(ctx, attr, safe_build(cls, key))
 
-    ctx.code_reviewer = safe_build(CodeReviewer, "code_review")
-    ctx.test_generator = safe_build(TestGenerator, "test_gen")
-    ctx.documentation_generator = safe_build(DocumentationGenerator, "docs")
+
+# =====MAIN BOOTSTRAP ENTRY POINT=====
 
 
 async def bootstrap(config_path: Optional[Path]) -> "AppContext":
+    """Initialize the full Ritsu context and all its systems."""
     cfg_mgr = ConfigManager(config_path)
     config = cfg_mgr.load()
 
@@ -482,81 +491,76 @@ async def bootstrap(config_path: Optional[Path]) -> "AppContext":
     )
 
     ctx = AppContext(config=config)
-    # Keep a reference to the config manager so runtime changes can be saved
     try:
         ctx.config_manager = cfg_mgr
     except Exception:
-        # best-effort; ignore if ctx doesn't support attr assignment
-        pass
+        pass  # non-critical
 
     # --- LLM base ---
-    ctx.llm = safe_init(RitsuLLM, model=_model_)  # Very lightweight model for low-end PC
-    # If the LLM exposes an async router start, ensure it's started so worker tasks are running
-    try:
-        if ctx.llm and hasattr(ctx.llm, "start"):
+    ctx.llm = safe_init(RitsuLLM, model=_model_)
+    if ctx.llm and hasattr(ctx.llm, "start"):
+        try:
             maybe = ctx.llm.start()
-            # start may be coroutine; schedule or await accordingly
             if asyncio.iscoroutine(maybe):
-                # schedule background start without blocking bootstrap
                 asyncio.create_task(maybe)
-    except Exception:
-        log.exception("Failed to start LLM router; continuing without async start")
+        except Exception:
+            log.exception("Failed to start LLM router; continuing...")
 
     # --- Core logic ---
-    # Prefer the new Planner implementation; fall back to legacy planner shim if necessary
-    # Initialize PlannerManager (handles both planners automatically)
     ctx.planner = safe_init(
         PlannerManager,
         config={
-                "auto_fallback": True,
-                "prefer_fast": True,
-                "event_planner_config": {"enable_memory": True}
+            "auto_fallback": True,
+            "prefer_fast": True,
+            "event_planner_config": {"enable_memory": True},
         },
-        llm=ctx.llm  # Passed for compatibility
+        llm=ctx.llm
     )
     if not ctx.planner:
         log.error("Failed to initialize PlannerManager")
-        ctx.planner = None
-    
+
     ctx.code_analyzer = safe_init(CodeAnalyzer, llm=ctx.llm)
     ctx.code_generator = safe_init(CodeGenerator, llm=ctx.llm)
     ctx.troubleshooter = safe_init(Troubleshooter)
     ctx.event_manager = safe_init(EventManager)
     ctx.executor = safe_init(Executor)
 
-    # --- I/O management ---
-    ctx.input_manager = safe_init(InputManager, config.get("input", {}))
-    ctx.output_manager = safe_init(OutputManager, config.get("output", {}))
-
-    # --- AI and memory ---
-    ctx.memory = safe_init(MemoryManager)
-    ctx.knowledge = safe_init(KnowledgeBase)
+    # --- Memory & Knowledge Systems (unified) ---
+    ctx.memory = safe_init(MemoryManager, config=config.get("memory", {}))
+    ctx.knowledge = safe_init(KnowledgeBase, config=config.get("knowledge_base", {}))
+    ctx.kb = ctx.knowledge  # alias for backwards compatibility
 
     # --- Tools ---
     ctx.calculator = safe_init(Calculator)
     ctx.file_reader = safe_init(FileReader)
     ctx.process_monitor = safe_init(ProcessMonitor)
+    ctx.tools = safe_init(Toolbelt, config=config.get("tools", {}))
 
     # --- Prompt templates ---
-    ctx.prompts = safe_init(PromptTemplates)
+    # PromptTemplates may be a class, module, or a plain string (character context).
+    if isinstance(PromptTemplates, str):
+        ctx.prompts = PromptTemplates
+    elif inspect.ismodule(PromptTemplates):
+        # try to find a reasonable attribute to use (e.g., 'character_context' or 'PromptTemplates')
+        ctx.prompts = getattr(PromptTemplates, "character_context", None) or getattr(PromptTemplates, "PromptTemplates", PromptTemplates)
+    else:
+        ctx.prompts = safe_init(PromptTemplates)
 
-    # --- Optional / advanced ---
-    ctx.tools = safe_init(Toolbelt, config=config.get("tools", {}))
-    ctx.event_manager = safe_init(EventManager, config=config.get("events", {}), queue=ctx.event_queue)
-    ctx.self_improvement = safe_init(SelfImprovement, config=config.get("self_improvement", {}))
-    ctx.ritsu_self = safe_init(RitsuSelf, config=config.get("ritsu_self", {}))
-    ctx.codedb = safe_init(CodeDB, path=Path(config.get("codedb", {}).get("path", "data/codedb")))
-
-    # --- Input stack ---
+    # --- Input Stack ---
     ctx.command_parser = safe_init(CommandParser, config=config.get("command_parser", {}))
-    ctx.mic = safe_init(STT, config=config.get("mic", {}))
+    ctx.mic = safe_init(STT, config=config.get("mic", {}), default=None)
+    if ctx.mic:
+        log.info("Speech listener initialized successfully")
+    else:
+        log.warning("Speech listener unavailable")
     ctx.chat = safe_init(ChatListener, config=config.get("chat", {}))
-    # Optional command classifier - rule-based/ML fallback
+
     try:
         from core.command_classifier import CommandClassifier
         ctx.command_classifier = safe_init(CommandClassifier)
     except Exception:
         ctx.command_classifier = None
+
     ctx.input_manager = safe_init(
         InputManager,
         config=config.get("input", {}),
@@ -566,8 +570,12 @@ async def bootstrap(config_path: Optional[Path]) -> "AppContext":
         command_classifier=ctx.command_classifier,
     )
 
-    # --- Output stack ---
-    ctx.tts = safe_init(TTS, config=config.get("tts", {}))
+    # --- Output Stack ---
+    ctx.tts = safe_init(TTS, config=config.get("tts", {}), default=None)
+    if ctx.tts:
+        log.info("Text-to-speech engine initialized successfully")
+    else:
+        log.warning("TTS engine unavailable")
     ctx.avatar = safe_init(AvatarAnimator, config=config.get("avatar", {}))
     ctx.stream = safe_init(StreamAdapter, config=config.get("stream", {}))
     ctx.output_manager = safe_init(
@@ -578,49 +586,60 @@ async def bootstrap(config_path: Optional[Path]) -> "AppContext":
         stream=ctx.stream,
     )
 
-    # --- AI stack ---
+    # --- AI Stack ---
     ctx.nlp = safe_init(NLPEngine, config=config.get("nlp", {}))
-    ctx.kb = safe_init(KnowledgeBase, config=config.get("knowledge_base", {}))
-    ctx.memory = safe_init(MemoryManager, config=config.get("memory", {}))
     ctx.ai_assistant = safe_init(
         AIAssistant,
         config=config.get("ai", {}),
         nlp_engine=ctx.nlp,
-        knowledge_base=ctx.kb,
+        knowledge_base=ctx.knowledge,
         memory_manager=ctx.memory,
         llm_engine=ctx.llm,
     )
 
-    # --- Optional externals ---
-    if config.get("rust_editor", {}).get("enabled", False) and RustEditor:
-        ctx.rust_editor = safe_init(RustEditor, config=config.get("rust_editor", {}))
-    if config.get("ui", {}).get("enabled", False) and UIClient:
-        ctx.ui = safe_init(UIClient, config=config.get("ui", {}))
+    # --- Optional / External Components ---
+    ctx.self_improvement = safe_init(SelfImprovement, config=config.get("self_improvement", {}))
+    ctx.ritsu_self = safe_init(RitsuSelf, config=config.get("ritsu_self", {}))
+    ctx.codedb = safe_init(CodeDB, path=Path(config.get("codedb", {}).get("path", "data/codedb")))
 
-    # --- Cross-link executor dependencies ---
-    if ctx.executor:
+    if config.get("rust_editor", {}).get("enabled", False):
         try:
-            executor_components = {
-                "ai_assistant": ctx.ai_assistant,
-                "memory_manager": ctx.memory,
-                "knowledge_base": ctx.kb,
-                "nlp_engine": ctx.nlp,
-                "toolbelt": ctx.tools,
-                "output_manager": ctx.output_manager,
-                "llm_engine": ctx.llm,  # Add LLM for fallback responses
-                "calculator": ctx.calculator,
-                "file_reader": ctx.file_reader,
-                "process_monitor": ctx.process_monitor,
+            ctx.rust_editor = safe_init(RustEditor, config=config.get("rust_editor", {}))
+        except Exception:
+            ctx.rust_editor = None
+    if config.get("ui", {}).get("enabled", False):
+        try:
+            ctx.ui = safe_init(UIClient, config=config.get("ui", {}))
+        except Exception:
+            ctx.ui = None
+
+    # --- Cross-Link Executor Dependencies ---
+    if ctx.executor and hasattr(ctx.executor, "set_components"):
+        try:
+            deps = {
+                k: v for k, v in {
+                    "ai_assistant": ctx.ai_assistant,
+                    "memory_manager": ctx.memory,
+                    "knowledge_base": ctx.knowledge,
+                    "nlp_engine": ctx.nlp,
+                    "toolbelt": ctx.tools,
+                    "output_manager": ctx.output_manager,
+                    "llm_engine": ctx.llm,
+                    "calculator": ctx.calculator,
+                    "file_reader": ctx.file_reader,
+                    "process_monitor": ctx.process_monitor,
+                }.items() if v is not None
             }
-            ctx.executor.set_components(executor_components)
+            ctx.executor.set_components(deps)
         except Exception as e:
-            log.warning(f"Failed to set executor components: {e}")
+            log.warning(f"Executor dependency setup failed: {e}")
             log.debug("".join(traceback.format_exc()))
 
-    # --- Finalize setup ---
+    # --- Enhanced and Final Setup ---
     add_enhanced_components(ctx, config)
-    log.info("Bootstrapped components", extra={"env": config.get("app", {}).get("env", "dev")})
+    log.info("✅ Bootstrapped Ritsu environment", extra={"env": config.get("app", {}).get("env", "dev")})
     return ctx
+
 
 # ------------------------------ Application Loops ------------------------------
 async def monitoring_loop(ctx: AppContext) -> None:

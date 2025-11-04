@@ -602,7 +602,19 @@ class TaskDecomposer(BaseModule):
 class ToolSelector():
     """Maps tasks to available tools"""
     
-    def __init__(self):
+    def __init__(
+                self, 
+                config: Optional[Dict[str, Any]] = None
+                available_tools: Optional[Dict[str, str]] = None
+                ):
+
+        """
+        Accept optional available_tools so callers can pass a dict.
+        Backwards compatible: callers that don't pass tools still work.
+        """
+        
+        self.available_tools = available_tools or {}
+        self.config = config or {}
         self.tool_capabilities = {
             "validator": {"validation", "checking", "verification"},
             "query_builder": {"querying", "searching", "filtering"},

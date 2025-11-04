@@ -455,7 +455,7 @@ class Executor:
             return {
                 "status": "completed",
                 "data": {"response": response}
-            }
+            } 
         except Exception as e:
             return {"status": "failed", "error": str(e)}
         

@@ -27,8 +27,8 @@ def _get_ollama():
             import ollama
             _ollama = ollama
         except Exception as e:
-            log.warning(f"Failed to import ollama: {e}")
-            _ollama = False
+            log.warning("Failed to import ollama Python client: %s. LLM features will be disabled.", e)
+            _ollama = None  # explicit None indicates missing client
     return _ollama if _ollama else None
 
 
@@ -39,10 +39,15 @@ def _get_ollama():
 class OllamaManager:
     """Handles Ollama health check and restart if needed."""
 
-    def __init__(self, host: str = "http://127.0.0.1:11434", debug: bool = False):
-        self.host = host
+    def __init__(self, host: str = "https://good-doors-rest.loca.lt", debug: bool = False):
+        # Allow override via environment variable (or fallback to localhost)
+        import os
+        # Prefer explicit host param -> OLLAMA_BASE_URL -> local default
+        self.host = host or os.getenv("OLLAMA_BASE_URL", None) or "http://127.0.0.1:11434"
         self._restart_lock = asyncio.Lock()
         self.debug = debug
+
+        log.info(f"OllamaManager using host: {self.host}")
 
     async def is_running(self) -> bool:
         """Ping Ollama API to confirm it's up and responsive."""

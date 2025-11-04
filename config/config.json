@@ -1,0 +1,7 @@
+{
+  "ollama": {
+    "base_url": "https://good-doors-rest.loca.lt",
+    "model": "llama3.1",
+    "timeout": 60
+  }
+}
