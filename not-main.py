@@ -1013,3 +1013,9 @@ if __name__ == "__main__":
 #   enabled: []
 # """
 #
+
+self.enable_cli = True  # Always enabled
+self.enable_mic = self.config.get("enable_mic", False) and mic is not None
+self.enable_chat = self.config.get("enable_chat", False) and chat is not None
+self.enable_ui = self.config.get("enable_ui", False)
+self.enable_api = self.config.get("enable_api", False)

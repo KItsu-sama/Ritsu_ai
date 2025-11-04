@@ -12,6 +12,7 @@ InputManager — decides: mic, chat, file
 
 import asyncio
 import logging
+import sys
 from typing import Any, Dict, List, Optional
 import subprocess
 import re
@@ -52,6 +53,12 @@ class InputManager:
         command_classifier=None,
     ):
         self.config = config or {}
+        # Check both config and sys.argv for debug mode
+        self.debug_mode = (
+            self.config.get("debug", False) or
+            "--debug" in sys.argv or
+            "-d" in sys.argv
+        )
         
         # Component references
         self.mic = mic
@@ -170,43 +177,48 @@ class InputManager:
             while not shutdown_event.is_set():
                 try:
                     # Get input from source
-                    log.debug(f"Awaiting input from {source_name}")
                     input_data = await handler()
-                    log.debug(f"Received input from {source_name}: {input_data}")
                     
+                    # Only log when real input arrives
                     if input_data:
-                        # Create event
-                        event = await self._create_event(source_name, input_data)
+                        if self.debug_mode and input_data:
+                            log.debug(f"Received input from {source_name}: {input_data}")
+                        log.debug(f"Received input from {source_name}: {input_data}")
                         
+                        # Create and emit event
+                        event = await self._create_event(source_name, input_data)
                         if event:
-                            # Emit to queue
                             await queue.put(event)
-                            
                             log.debug("Input event emitted", extra={
                                 "source": source_name,
                                 "content_preview": input_data.get("content", "")[:50]
                             })
+                    else:
+                        # Optional: quieter trace for idle waiting
+                        log.trace(f"Awaiting input from {source_name}") if hasattr(log, "trace") else None
                     
                     # Small delay to prevent tight loops
-                    await asyncio.sleep(0.1)
-                    
+                    await asyncio.sleep(0.1 if not input_data else 0)
+
+
                 except asyncio.CancelledError:
                     raise
                 except Exception as e:
-                    if str(e) == "EOF when reading a line":
-                        # Handle EOF gracefully
-                        log.debug(f"EOF received on {source_name}, stopping")
-                        break
+                    if "EOF" in str(e):
+                        # Handle EOF gracefully - just continue the loop
+                        log.debug(f"EOF received on {source_name}, continuing")
+                        await asyncio.sleep(0.1)
+                        continue
                     log.error(f"Input source error on {source_name}: {e}", extra={
                         "source": source_name,
                         "error": str(e)
                     })
-                    # Continue running other sources
-                    await asyncio.sleep(1.0)  # Longer delay after error
-                    
+                    await asyncio.sleep(1.0)
+
         except asyncio.CancelledError:
             log.debug("Input source cancelled", extra={"source": source_name})
             raise
+
     
     async def _handle_cli_input(self) -> Optional[Dict[str, Any]]:
         """Handle CLI input."""
@@ -381,11 +393,10 @@ class InputManager:
                         }
                     
                 except EOFError:
-                    # Handle Ctrl+D or EOF
-                    return {
-                        "content": "!quit",
-                        "metadata": {"input_method": "keyboard", "eof": True}
-                    }
+                    # Handle Ctrl+D or EOF gracefully
+                    log.debug("CLI: EOF received")
+                    await asyncio.sleep(0.1)  # Prevent tight loop on EOF
+                    return None
                 except KeyboardInterrupt:
                     # Handle Ctrl+C
                     return {
